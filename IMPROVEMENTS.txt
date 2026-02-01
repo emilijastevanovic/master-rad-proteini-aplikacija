@@ -1,0 +1,34 @@
+Correctness / Bugs
+- static/js/main.js: loadGraph() calls /api/graph/ and expects a #graph element, but no route or element exists in templates/index.html. Either remove the 2D graph path or add the missing endpoint + DOM node. 
+- distances/protein_analysis.py: make_aa_string() is indented inside make_heat_maps() after a return, so it is unreachable and never defined. This is a real bug. *
+- distances/views.py: graph3d_protein() doesn’t validate protein and will send None to Neo4j; return 400 like stats()/heatmap_distance().
+
+Security / Config
+- proteinapp/settings.py: hard-coded SECRET_KEY, DEBUG=True, and empty ALLOWED_HOSTS need environment-based configuration before any deployment.
+- distances/neo4j_client.py: creates a global Neo4j driver at import without checking envs; if NEO4J_URI is unset this will crash on import. Add explicit config validation + graceful failure.
+- requirements.txt: django-cors-headers is installed but not configured in proteinapp/settings.py. If the API is used cross-origin, wire it in or remove the dependency.
+
+Query correctness / Data filtering
+- distances/query_builder.py: chain parameter is never used; add chain filtering to both the “node-only” and “distance” branches.
+- distances/stats_queries.py: stat_aa_composition, stat_aa_seq, and stat_aa_heatmap_df ignore chain, min_distance, and max_distance. Make those filters consistent with the graph endpoints.
+- distances/views.py: graph3d_view() selects a1.ss AS ss2 instead of a2.ss (typo); if you keep this endpoint, fix the fields.
+
+Performance / Scalability
+- distances/views.py: both graph endpoints return all nodes/edges without limits. Add caps or pagination for large proteins to avoid huge JSON payloads and browser lockups. *
+- distances/protein_analysis.py: make_heat_maps() computes full distance matrices and plots on every request. Cache heatmaps per (protein, chain, type, thresholds) and consider downsampling for very large matrices. *
+- distances/neo4j_client.py: reuse a single driver, but also close it on shutdown; add connection pooling parameters and timeouts to avoid hanging requests.
+
+API & UX Consistency
+- static/js/main.js: renderHeatmapsFromUrls() shows a “Contact map” subtitle but the backend doesn’t return contact images (contact_png is commented out in make_heat_maps()). Either return the contact map or remove the UI hint.
+- static/js/main.js: two versions of loadGraph3D (loadGraph3D and loadGraph3D1) — keep one to reduce confusion.
+- templates/index.html: inputs are free-form; add minimal validation or a “protein not found” state on failed API responses.
+
+Code quality / Maintainability
+- distances/views.py: duplicate imports and debug print() statements should be replaced with structured logging (Django logger).
+- distances/stats_queries.py: unused imports (JsonResponse, make_heat_maps) should be removed.
+- distances/models.py / distances/tests.py: empty stubs — either implement tests/models or remove to reduce noise.
+- requirements.txt: djangorestframework, pytest are installed but not used. Either use DRF properly for the API or remove it; same for pytest if you’re sticking with Django’s test runner.
+
+Documentation / Project structure
+- Add README.md with setup steps, required env vars (NEO4J_*), sample .env, and example API calls.
+- Add a config/ or .env.example to make it reproducible across machines.

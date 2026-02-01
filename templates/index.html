@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <title>Protein Graph Viewer 🧬</title>
+
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+
+<body>
+
+  <h1>Protein Graph Viewer 🧬</h1>
+
+  <!-- Controls -->
+  <div class="controls">
+    <input id="protein" placeholder="Protein ID (npr. 1A17)">
+
+    <label for="aminoname">Aminokiselina:</label>
+    <select id="aminoname">
+      <option value="">–</option>
+      <option>ASP</option><option>GLY</option><option>LEU</option><option>LYS</option>
+      <option>ARG</option><option>GLU</option><option>THR</option><option>GLN</option>
+      <option>ASN</option><option>TYR</option><option>PHE</option><option>ILE</option>
+      <option>SER</option><option>CYS</option><option>MET</option><option>VAL</option>
+      <option>HIS</option><option>TRP</option><option>PRO</option>
+    </select>
+
+    <label for="type">Tip rastojanja:</label>
+    <select id="type">
+      <option value="prazno">–</option>
+      <option value="caca">Cα–Cα</option>
+      <option value="minbezh">MinBezH</option>
+      <option value="maxbezh">MaxBezH</option>
+    </select>
+
+    <input id="maxdist" placeholder="Gornji prag (npr. 8.0)">
+    <input id="mindist" placeholder="Donji prag (opciono)">
+
+    <label for="chain">Lanac:</label>
+    <select id="chain">
+      <option value="prazno">–</option>
+      <option>A</option><option>B</option><option>C</option><option>D</option>
+      <option>X</option><option>P</option><option>N</option><option>F</option>
+      <option>I</option><option>G</option><option>R</option>
+    </select>
+
+    <button type="button" onclick="loadGraph3D()">Prikaži</button>
+  </div>
+
+  <!-- MAIN: Viewer + Stats sidebar -->
+  <div class="layout">
+
+    <!-- LEFT: 3D Viewer panel -->
+    <div id="graphPanel">
+      <!-- 3D Viewer wrapper (tvoj JS ga koristi) -->
+      <div id="viewer3d-wrapper">
+        <div id="viewer3d"></div>
+        <div id="loader3d">Učitavanje…</div>
+      </div>
+
+  
+    </div>
+
+    <!-- RIGHT: Stats panel -->
+    <div id="statsPanel">
+      <div class="panel-title">Statistike</div>
+
+      <div class="tab-buttons">
+        <button class="tab-btn active" type="button" data-tab="tabOverview">Overview</button>
+        <button class="tab-btn" type="button" data-tab="tabSeq">Seq</button>
+        <button class="tab-btn" type="button" data-tab="tabDistance">Distance</button>
+        <button class="tab-btn" type="button" data-tab="tabSSPairs">SS pairs</button>
+        <button class="tab-btn" type="button" data-tab="tabSegments">Segments</button>
+      </div>
+
+      <!-- OVERVIEW -->
+      <div class="tab-content" id="tabOverview">
+        <div class="card">
+          <h3>AA composition</h3>
+          <div class="muted" id="aaStatsMeta">Klikni “Prikaži” da učitaš podatke.</div>
+
+          <table id="aaStatsTable" style="margin-top: 10px;">
+            <thead>
+              <tr>
+                <th>AA</th>
+                <th class="num">Count</th>
+                <th class="num">%</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3>Distance summary</h3>
+          <div class="muted">Uskoro: mean/median/p95 i pct&lt;8Å po izabranom tipu.</div>
+        </div>
+      </div>
+
+      <!-- SEQ -->
+      <div class="tab-content" id="tabSeq" style="display:none;">
+        <div class="card">
+          <h3>Primarna sekvenca</h3>
+        
+          <!-- za colored tokens -->
+          <div class="seqTokens" id="aaSequenceTokens">Klikni “Prikaži”...</div>
+        </div>
+        
+        <div class="card">
+          <h3>SS track</h3>
+          <div class="seqTokens" id="ssTrackTokens">Klikni “Prikaži”...</div>
+        </div>
+      </div>
+
+      <!-- DISTANCE -->
+      <div class="tab-content" id="tabDistance" style="display:none;">
+        <div class="card">
+          <h3>Heatmap distanci</h3>
+          <div class="muted">Uskoro: slika heatmap-a po tipu rastojanja.</div>
+        </div>
+      </div>
+
+      <!-- SS PAIRS -->
+      <div class="tab-content" id="tabSSPairs" style="display:none;">
+        <div class="card">
+          <h3>SS pair statistike</h3>
+          <div class="muted">Uskoro: tabela count/mean/median/std/min/max.</div>
+        </div>
+      </div>
+
+      <!-- SEGMENTS -->
+      <div class="tab-content" id="tabSegments" style="display:none;">
+        <div class="card">
+          <h3>Segment lengths (idss)</h3>
+          <div class="muted">Uskoro: histogram dužina segmenata.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="nodeTooltip"></div>
+
+  <!-- Libs -->
+  <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+  <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+
+  <!-- App JS -->
+  <script src="{% static 'js/main.js' %}"></script>
+
+</body>
+</html>
