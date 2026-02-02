@@ -4,19 +4,19 @@ Correctness / Bugs
 - distances/views.py: graph3d_protein() doesn’t validate protein and will send None to Neo4j; return 400 like stats()/heatmap_distance().
 
 Security / Config
-- proteinapp/settings.py: hard-coded SECRET_KEY, DEBUG=True, and empty ALLOWED_HOSTS need environment-based configuration before any deployment.
-- distances/neo4j_client.py: creates a global Neo4j driver at import without checking envs; if NEO4J_URI is unset this will crash on import. Add explicit config validation + graceful failure.
+- proteinapp/settings.py: hard-coded SECRET_KEY, DEBUG=True, and empty ALLOWED_HOSTS need environment-based configuration before any deployment. *
+- distances/neo4j_client.py: creates a global Neo4j driver at import without checking envs; if NEO4J_URI is unset this will crash on import. Add explicit config validation + graceful failure. *
 - requirements.txt: django-cors-headers is installed but not configured in proteinapp/settings.py. If the API is used cross-origin, wire it in or remove the dependency.
 
 Query correctness / Data filtering
 - distances/query_builder.py: chain parameter is never used; add chain filtering to both the “node-only” and “distance” branches.
 - distances/stats_queries.py: stat_aa_composition, stat_aa_seq, and stat_aa_heatmap_df ignore chain, min_distance, and max_distance. Make those filters consistent with the graph endpoints.
-- distances/views.py: graph3d_view() selects a1.ss AS ss2 instead of a2.ss (typo); if you keep this endpoint, fix the fields.
+- distances/views.py: graph3d_view() selects a1.ss AS ss2 instead of a2.ss (typo); if you keep this endpoint, fix the fields. *
 
 Performance / Scalability
 - distances/views.py: both graph endpoints return all nodes/edges without limits. Add caps or pagination for large proteins to avoid huge JSON payloads and browser lockups. *
 - distances/protein_analysis.py: make_heat_maps() computes full distance matrices and plots on every request. Cache heatmaps per (protein, chain, type, thresholds) and consider downsampling for very large matrices. *
-- distances/neo4j_client.py: reuse a single driver, but also close it on shutdown; add connection pooling parameters and timeouts to avoid hanging requests.
+- distances/neo4j_client.py: reuse a single driver, but also close it on shutdown; add connection pooling parameters and timeouts to avoid hanging requests. *
 
 API & UX Consistency
 - static/js/main.js: renderHeatmapsFromUrls() shows a “Contact map” subtitle but the backend doesn’t return contact images (contact_png is commented out in make_heat_maps()). Either return the contact map or remove the UI hint.

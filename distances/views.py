@@ -8,6 +8,7 @@ from .query_builder import  build_graph3d_protein
 from .stats_queries import stat_aa_composition, stat_aa_seq, stat_aa_heatmap_df
 from .protein_analysis import make_heat_maps
 import hashlib
+from neo4j.exceptions import Neo4jError
 
 STAT_HANDLERS = {
     "aa_composition": stat_aa_composition,
@@ -63,7 +64,10 @@ def graph3d_view(request):
     if max_distance:
         cy_params["max_distance"] = float(max_distance)
 
-    rows = run_query(q, **cy_params)
+    try:
+        rows = run_query(q, **cy_params)
+    except (RuntimeError, Neo4jError) as e:
+        return JsonResponse({"error": "neo4j_unavailable", "detail": str(e)}, status=503)
 
     nodes, edges = {}, []
 
@@ -131,7 +135,10 @@ def graph3d_protein(request):
     print("***************")
 
     # izvršavanje Neo4j upita
-    rows = run_query(q, **cy_params)
+    try:
+        rows = run_query(q, **cy_params)
+    except (RuntimeError, Neo4jError) as e:
+        return JsonResponse({"error": "neo4j_unavailable", "detail": str(e)}, status=503)
     print("ROW COUNT:", len(rows))
 
     for r in rows:
