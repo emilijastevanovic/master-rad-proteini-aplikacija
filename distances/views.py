@@ -19,6 +19,8 @@ STAT_HANDLERS = {
 
 def graph3d_view(request):
     protein = request.GET.get("protein")
+    if not protein:
+        return JsonResponse({"error": "protein parameter is required"}, status=400)
     type_ = request.GET.get("type", "caca")
     max_distance = request.GET.get("max_distance")
 
@@ -112,9 +114,12 @@ def graph3d_view(request):
     })
 
 def graph3d_protein(request):
+    protein = request.GET.get("protein")
+    if not protein:
+        return JsonResponse({"error": "protein parameter is required"}, status=400)
 
     params = {
-        "protein": request.GET.get("protein"),
+        "protein": protein,
         "aminoname": request.GET.get("aminoname"),
         "type": request.GET.get("type", "prazno"),
         "max_distance": request.GET.get("max_distance"),

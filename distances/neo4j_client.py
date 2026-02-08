@@ -9,7 +9,7 @@ _DRIVER = None
 def _get_neo4j_config():
     uri = os.getenv("NEO4J_URI")
     user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASS")  # ili NEO4J_PASSWORD ako tako zoveš u .env
+    password = os.getenv("NEO4J_PASS")
     missing = [k for k, v in {
         "NEO4J_URI": uri,
         "NEO4J_USER": user,

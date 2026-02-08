@@ -1,12 +1,12 @@
 def build_graph3d_protein(p):
     params = {"protein": p["protein"]}
 
+    # node only grana - ako nisu zadati filteri 
     if (
         p["aminoname"] == "" and
         p["max_distance"] == "" and
         p["min_distance"] == "" and
-        p["type"] == "prazno" and
-        p["chain"] == "prazno"
+        p["type"] == "prazno" 
     ):
         q = [
             "MATCH (a:AminoAcid)",
@@ -31,6 +31,10 @@ def build_graph3d_protein(p):
         "AND a1.index < a2.index"
 
     ]
+
+    if p.get("chain") and p["chain"] != "prazno":
+        q.append("AND a1.chain = $chain AND a2.chain = $chain")
+        params["chain"] = p["chain"]
 
     if p["aminoname"] != "":
         q.append("AND a1.name = $aminoname1 AND a2.name = $aminoname2")
