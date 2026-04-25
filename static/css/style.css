@@ -115,25 +115,16 @@
     width: 92%;
     max-width: 1400px;
     margin-top: 18px;
-  
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 380px;
     gap: var(--gap);
-    align-items: stretch;
+    align-items: start;
   }
-  
-  /* Graph container (Cytoscape) */
-  #graph {
-    width: 100%;
-    height: 70vh;
-    background: var(--card-solid);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    border: 1px solid var(--border-soft);
-  }
-  
+
   /* Stats Panel */
   #statsPanel {
+    max-height: 74vh;
+    overflow-y: auto;
     background: var(--card-bg);
     backdrop-filter: blur(10px);
     box-shadow: var(--shadow);
@@ -297,17 +288,13 @@
     .layout {
       grid-template-columns: 1fr;
     }
-  
+
     #statsPanel {
-      position: relative;
-      top: unset;
-    }
-  
-    #graph {
-      height: 65vh;
+      max-height: none;
+      overflow-y: visible;
     }
   }
-  
+
   @media (max-width: 768px) {
     .controls {
       flex-direction: column;
@@ -366,6 +353,30 @@
     margin-left: 12px;
     animation: spin 0.7s linear infinite;
   }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .img-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-top: 10px;
+  }
+
+  .img-loading::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    border: 3px solid var(--accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
   
   .seqTokens {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -384,8 +395,68 @@
     border: 1px solid #e0e0e0;
   }
   
-.ss-H { border-top-color: #ff7f0e; }   /* helix */
-.ss-E { border-top-color: #2ca02c; }   /* beta sheet */
-.ss-T { border-top-color: #ffd700; }   /* turn */
-.ss-S { border-top-color: #9467bd; }   /* bend */
-.ss-dot { border-top-color: #bdbdbd; } /* none */
+/* SS track boje */
+.ss-H   { background: #fff0e0; border-top: 3px solid #ff7f0e; color: #7a3800; }
+.ss-E   { background: #e6f4e6; border-top: 3px solid #2ca02c; color: #145214; }
+.ss-T   { background: #fffbe0; border-top: 3px solid #d4a800; color: #6b5500; }
+.ss-S   { background: #f0e8ff; border-top: 3px solid #9467bd; color: #4a2080; }
+.ss-dot { background: #f2f2f2; border-top: 3px solid #bdbdbd; color: #666;   }
+
+/* AA sequence boje — po hemijskim svojstvima */
+.aa-hydrophobic { background: #fff3b0; border-top: 3px solid #e6b800; color: #5a4400; } /* A V I L M F W P */
+.aa-polar       { background: #d4f0d4; border-top: 3px solid #4caf50; color: #1a4d1a; } /* S T C Y N Q    */
+.aa-positive    { background: #cce0ff; border-top: 3px solid #2979ff; color: #003380; } /* K R H          */
+.aa-negative    { background: #ffd5d5; border-top: 3px solid #e53935; color: #7a0000; } /* D E            */
+.aa-special     { background: #ececec; border-top: 3px solid #9e9e9e; color: #444;    } /* G              */
+
+/* ---------------------------
+   Viewer inline message
+--------------------------- */
+#viewer-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #555;
+  pointer-events: none;
+  visibility: hidden;
+  z-index: 5;
+  text-align: center;
+  padding: 20px;
+  border-radius: var(--radius);
+}
+
+#viewer-message.error { color: #c0392b; }
+
+/* ---------------------------
+   Lightbox
+--------------------------- */
+#lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  z-index: 99998;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+#lightbox.open {
+  display: flex;
+}
+
+#lightbox img {
+  max-width: 92vw;
+  max-height: 92vh;
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  cursor: default;
+}
+
+.zoomable {
+  cursor: zoom-in;
+}

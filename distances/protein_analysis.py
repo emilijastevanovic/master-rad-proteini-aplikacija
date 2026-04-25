@@ -1,3 +1,5 @@
+import logging
+
 import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
@@ -5,7 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import io
-import hashlib
+
+logger = logging.getLogger(__name__)
 
 
 def make_residual_level_df(df:pd.DataFrame) -> pd.DataFrame:
@@ -259,7 +262,7 @@ def format_ss_track(ss_string: str,
 
     return "\n".join(blocks).rstrip()
 
-
+# uradjeno
 def print_ss_tracks(res: pd.DataFrame,
                     ss_col="ss",
                     index_col="indeks",
@@ -287,7 +290,7 @@ def print_ss_tracks(res: pd.DataFrame,
     for (prot, chain), g in groups:
         g = g.dropna(subset=[index_col]).sort_values(index_col)
         if g.empty:
-            print(f"\n{prot} chain {chain}: <empty>\n")
+            logger.debug("%s chain %s: empty", prot, chain)
             continue
 
         start = int(g[index_col].min())
@@ -310,11 +313,7 @@ def print_ss_tracks(res: pd.DataFrame,
             label="ss"
         )
 
-        print("\n" + "=" * 80)
-        print(f"{prot}  chain {chain}   start_index={start}   length={len(ss_string)}")
-        print("=" * 80)
-        print(track)
-        print()
+        logger.debug("%s chain %s  start_index=%d  length=%d\n%s", prot, chain, start, len(ss_string), track)
 
 def plot_segment_length_hist(res: pd.DataFrame, bins: int = 30):
     seg_len = segment_length_table(res)
@@ -350,6 +349,7 @@ def plot_pie_from_percent_table(t: pd.DataFrame, name_col: str, value_col: str =
     plt.show()
 
 
+# uradjeno
 def make_heat_maps(df: pd.DataFrame, protein: str, threshold: float = 8):
   M = make_heatmap_matrix(df)
 
@@ -395,12 +395,14 @@ def make_heat_maps(df: pd.DataFrame, protein: str, threshold: float = 8):
         #"contact_png": buf2.getvalue(),
     }
 
+# uradjeno
 def make_aa_string(df:pd.DataFrame) -> str:
     """
     Funkcija prima rezudial level DataFrame i vraca sekvencu aminokiselina.
     """
     return "-".join(list(df['aa']))
 
+# uradjeno
 def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
     """
     Funkcija prima kao argument DataFrame za odredjeni tip rastojanja i vraca po paru ss-ss statistike.
@@ -424,3 +426,18 @@ def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
     stats_df = stats_df.sort_values("count", ascending=False)
 
     return stats_df
+
+
+def make_segment_hist_png(segment_lengths: list, protein: str, bins: int = 30) -> bytes:
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.hist(segment_lengths, bins=bins, color="#1f77b4", edgecolor="white")
+    ax.set_title(f"Segment length distribution — {protein}")
+    ax.set_xlabel("Dužina segmenta (br. rezidua)")
+    ax.set_ylabel("Broj pojavljivanja")
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()

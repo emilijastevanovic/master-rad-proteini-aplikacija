@@ -2,7 +2,7 @@
 <html lang="sr">
 <head>
   <meta charset="UTF-8">
-  <title>Protein Graph Viewer 🧬</title>
+  <title>Protein Graph Viewer</title>
 
   {% load static %}
   <link rel="stylesheet" href="{% static 'css/style.css' %}">
@@ -10,7 +10,7 @@
 
 <body>
 
-  <h1>Protein Graph Viewer 🧬</h1>
+  <h1>Protein Graph Viewer</h1>
 
   <!-- Controls -->
   <div class="controls">
@@ -53,13 +53,11 @@
 
     <!-- LEFT: 3D Viewer panel -->
     <div id="graphPanel">
-      <!-- 3D Viewer wrapper (tvoj JS ga koristi) -->
       <div id="viewer3d-wrapper">
         <div id="viewer3d"></div>
         <div id="loader3d">Učitavanje…</div>
+        <div id="viewer-message"></div>
       </div>
-
-  
     </div>
 
     <!-- RIGHT: Stats panel -->
@@ -72,14 +70,14 @@
         <button class="tab-btn" type="button" data-tab="tabDistance">Distance</button>
         <button class="tab-btn" type="button" data-tab="tabSSPairs">SS pairs</button>
         <button class="tab-btn" type="button" data-tab="tabSegments">Segments</button>
+        <button class="tab-btn" type="button" data-tab="tabOutliers">Outliers</button>
       </div>
 
       <!-- OVERVIEW -->
       <div class="tab-content" id="tabOverview">
         <div class="card">
           <h3>AA composition</h3>
-          <div class="muted" id="aaStatsMeta">Klikni “Prikaži” da učitaš podatke.</div>
-
+          <div class="muted" id="aaStatsMeta">Klikni "Prikaži" da učitaš podatke.</div>
           <table id="aaStatsTable" style="margin-top: 10px;">
             <thead>
               <tr>
@@ -94,7 +92,10 @@
 
         <div class="card">
           <h3>Distance summary</h3>
-          <div class="muted">Uskoro: mean/median/p95 i pct&lt;8Å po izabranom tipu.</div>
+          <div class="muted" id="distSummaryMeta">Klikni "Prikaži" da učitaš podatke.</div>
+          <table id="distSummaryTable" style="margin-top:10px; display:none;">
+            <tbody></tbody>
+          </table>
         </div>
       </div>
 
@@ -102,14 +103,12 @@
       <div class="tab-content" id="tabSeq" style="display:none;">
         <div class="card">
           <h3>Primarna sekvenca</h3>
-        
-          <!-- za colored tokens -->
-          <div class="seqTokens" id="aaSequenceTokens">Klikni “Prikaži”...</div>
+          <div class="seqTokens" id="aaSequenceTokens">Klikni "Prikaži"...</div>
         </div>
-        
+
         <div class="card">
           <h3>SS track</h3>
-          <div class="seqTokens" id="ssTrackTokens">Klikni “Prikaži”...</div>
+          <div class="seqTokens" id="ssTrackTokens">Klikni "Prikaži"...</div>
         </div>
       </div>
 
@@ -117,7 +116,7 @@
       <div class="tab-content" id="tabDistance" style="display:none;">
         <div class="card">
           <h3>Heatmap distanci</h3>
-          <div class="muted">Uskoro: slika heatmap-a po tipu rastojanja.</div>
+          <div class="muted">Klikni "Prikaži" pa otvori ovaj tab.</div>
         </div>
       </div>
 
@@ -125,21 +124,75 @@
       <div class="tab-content" id="tabSSPairs" style="display:none;">
         <div class="card">
           <h3>SS pair statistike</h3>
-          <div class="muted">Uskoro: tabela count/mean/median/std/min/max.</div>
+          <div class="muted" id="ssPairsMeta">Klikni "Prikaži" da učitaš podatke.</div>
+          <table id="ssPairsTable" style="margin-top:10px; display:none;">
+            <thead>
+              <tr>
+                <th>SS par</th>
+                <th class="num">Count</th>
+                <th class="num">Mean (Å)</th>
+                <th class="num">Median (Å)</th>
+                <th class="num">Min (Å)</th>
+                <th class="num">Max (Å)</th>
+                <th class="num">Std</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
 
       <!-- SEGMENTS -->
       <div class="tab-content" id="tabSegments" style="display:none;">
         <div class="card">
-          <h3>Segment lengths (idss)</h3>
-          <div class="muted">Uskoro: histogram dužina segmenata.</div>
+          <h3>Segment lengths</h3>
+          <div class="muted">Klikni "Prikaži" pa otvori ovaj tab.</div>
         </div>
       </div>
+
+      <!-- OUTLIERS -->
+      <div class="tab-content" id="tabOutliers" style="display:none;">
+        <div class="card">
+          <h3>Prosečno rastojanje po SS tipu</h3>
+          <div class="muted" id="outlierSSMeta">Klikni "Prikaži" da učitaš podatke.</div>
+          <table id="outlierSSTable" style="margin-top:10px; display:none;">
+            <thead>
+              <tr>
+                <th>SS</th>
+                <th class="num">N rezidua</th>
+                <th class="num">Mean (Å)</th>
+                <th class="num">Median (Å)</th>
+                <th class="num">p90 (Å)</th>
+                <th class="num">Max (Å)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3>Top 15 najizolovanijih rezidua</h3>
+          <div class="muted" id="outlierTopMeta"></div>
+          <table id="outlierTopTable" style="margin-top:10px; display:none;">
+            <thead>
+              <tr>
+                <th>AA</th>
+                <th class="num">Index</th>
+                <th>Lanac</th>
+                <th>SS</th>
+                <th class="num">Avg dist (Å)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   </div>
 
   <div id="nodeTooltip"></div>
+  <div id="lightbox"><img id="lightboxImg" src="" alt=""></div>
 
   <!-- Libs -->
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
