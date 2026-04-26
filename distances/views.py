@@ -20,110 +20,17 @@ STAT_HANDLERS = {
     "outlier_ss": stat_outlier_ss,
 }
 
-def graph3d_view(request):
-    protein = request.GET.get("protein")
-    if not protein:
-        return JsonResponse({"error": "protein parameter is required"}, status=400)
-    type_ = request.GET.get("type", "caca")
-    max_distance = request.GET.get("max_distance")
-
-    try:
-        limit = int(request.GET.get("limit", 20000))
-    except ValueError:
-        limit = 20000
-    limit = max(1, min(limit, 50000))  # hard cap
-
-    q = """
-    MATCH (a1:AminoAcid)-[r:DISTANCE]->(a2:AminoAcid)
-    WHERE a1.protein = $protein AND r.type = $type
-    """ 
-    if max_distance:
-        q += " AND r.value <= $max_distance"
-
-    q += """
-    WITH a1, a2, r
-    ORDER BY r.value ASC
-    LIMIT $limit
-    RETURN
-        a1.protein AS protein,
-        a1.chain AS chain,
-        a1.index AS index,
-        a1.name AS aa,
-        a1.ss AS ss1,
-        a1.ca_coordinates.x AS x,
-        a1.ca_coordinates.y AS y,
-        a1.ca_coordinates.z AS z,
-        a2.protein AS protein2,
-        a2.chain AS chain2,
-        a2.index AS index2,
-        a2.name AS aa2,
-        a2.ss AS ss2,
-        a2.ca_coordinates.x AS x2,
-        a2.ca_coordinates.y AS y2,
-        a2.ca_coordinates.z AS z2,
-        r.type AS type,
-        r.value AS value
-    """
-
-    cy_params = {"protein": protein, "type": type_, "limit": limit}
-    if max_distance:
-        cy_params["max_distance"] = float(max_distance)
-
-    try:
-        rows = run_query(q, **cy_params)
-    except (RuntimeError, Neo4jError) as e:
-        return JsonResponse({"error": "neo4j_unavailable", "detail": str(e)}, status=503)
-
-    nodes, edges = {}, []
-
-    for r in rows:
-        a1_id = f"{r['protein']}:{r['chain']}:{r['index']}"
-        a2_id = f"{r['protein2']}:{r['chain2']}:{r['index2']}"
-        if a1_id not in nodes:
-            nodes[a1_id] = {
-                "id": a1_id,
-                "protein": r["protein"],
-                "chain": r["chain"],
-                "index": r["index"],
-                "aa": r["aa"],
-                "ss": r.get("ss1"),
-                "x": r.get("x"),
-                "y": r.get("y"),
-                "z": r.get("z"),
-            }
-        if a2_id not in nodes:
-            nodes[a2_id] = {
-                "id": a2_id,
-                "protein": r["protein2"],
-                "chain": r["chain2"],
-                "index": r["index2"],
-                "aa": r["aa2"],
-                "ss": r.get("ss2"),
-                "x": r.get("x2"),
-                "y": r.get("y2"),
-                "z": r.get("z2"),
-            }
-
-        edges.append({
-            "source": a1_id,
-            "target": a2_id,
-            "type": r["type"],
-            "value": r["value"],
-        })
-
-    return JsonResponse({
-        "nodes": list(nodes.values()),
-        "edges": edges
-    })
-
 def graph3d_protein(request):
     protein = request.GET.get("protein")
     if not protein:
         return JsonResponse({"error": "protein parameter is required"}, status=400)
 
+    aminoname_raw = request.GET.get("aminoname", "")
     params = {
         "protein": protein,
-        "aminoname": request.GET.get("aminoname"),
+        "aminonames": [a for a in aminoname_raw.split(",") if a],
+        "ss": request.GET.get("ss", "/"),
+        "k": request.GET.get("k"),
         "type": request.GET.get("type", "prazno"),
         "max_distance": request.GET.get("max_distance"),
         "min_distance": request.GET.get("min_distance"),
@@ -318,3 +225,85 @@ def segments_histogram(request):
     cache.set(cache_key, png, timeout=60 * 60 * 24)
 
     return HttpResponse(png, content_type="image/png")
+
+
+def global_stats(request):
+    cached = cache.get("global_stats")
+    if cached:
+        return JsonResponse(cached)
+
+    try:
+        # protein/AA agregatne statistike — dužina po lancu
+        aa_row = run_query("""
+            MATCH (a:AminoAcid)
+            WITH a.protein AS p, a.chain AS c, count(a) AS len
+            RETURN count(DISTINCT p)                   AS proteins,
+                   sum(len)                            AS amino_acids,
+                   round(avg(len), 1)                  AS avg_len,
+                   round(percentileCont(len, 0.5), 1)  AS median_len,
+                   min(len)                            AS min_len,
+                   max(len)                            AS max_len
+        """)
+
+        # distribucija sekundarnih struktura
+        ss_rows = run_query("""
+            MATCH (a:AminoAcid)
+            WHERE a.ss IS NOT NULL
+            RETURN a.ss AS ss, count(a) AS n
+            ORDER BY n DESC
+        """)
+
+        # top 5 aminokiselina u celoj bazi
+        top_aa_rows = run_query("""
+            MATCH (a:AminoAcid)
+            WITH a.name AS name, count(a) AS n
+            ORDER BY n DESC
+            LIMIT 5
+            RETURN name, n
+        """)
+
+        # statistike rastojanja po tipu — jedan sken svih DISTANCE
+        dist_rows = run_query("""
+            MATCH ()-[r:DISTANCE]->()
+            RETURN r.type AS type,
+                   count(r)                   AS n,
+                   round(avg(r.value), 2)     AS mean,
+                   round(stdev(r.value), 2)   AS std,
+                   round(min(r.value), 2)     AS min_val,
+                   round(max(r.value), 2)     AS max_val
+            ORDER BY type
+        """)
+
+        aa        = aa_row[0] if aa_row else {}
+        total_aa  = aa.get("amino_acids") or 1
+        ss_total  = sum(r["n"] for r in ss_rows) or 1
+
+        data = {
+            "proteins":        aa.get("proteins", 0),
+            "amino_acids":     aa.get("amino_acids", 0),
+            "avg_length":      aa.get("avg_len", 0),
+            "median_length":   aa.get("median_len", 0),
+            "min_length":      aa.get("min_len", 0),
+            "max_length":      aa.get("max_len", 0),
+            "ss_distribution": [
+                {"ss": r["ss"], "n": r["n"],
+                 "pct": round(r["n"] * 100 / ss_total, 1)}
+                for r in ss_rows
+            ],
+            "top_aa": [
+                {"name": r["name"], "n": r["n"],
+                 "pct": round(r["n"] * 100 / total_aa, 1)}
+                for r in top_aa_rows
+            ],
+            "dist_stats": [
+                {"type": r["type"], "n": r["n"], "mean": r["mean"],
+                 "std": r["std"], "min": r["min_val"], "max": r["max_val"]}
+                for r in dist_rows
+            ],
+        }
+
+        cache.set("global_stats", data, timeout=60 * 60 * 6)
+        return JsonResponse(data)
+
+    except (RuntimeError, Neo4jError) as e:
+        return JsonResponse({"error": "neo4j_unavailable", "detail": str(e)}, status=503)

@@ -11,41 +11,100 @@
 <body>
 
   <h1>Protein Graph Viewer</h1>
+  <p class="app-subtitle">Vizualizacija i analiza proteinskih struktura</p>
 
   <!-- Controls -->
   <div class="controls">
-    <input id="protein" placeholder="Protein ID (npr. 1A17)">
 
-    <label for="aminoname">Aminokiselina:</label>
-    <select id="aminoname">
-      <option value="">–</option>
-      <option>ASP</option><option>GLY</option><option>LEU</option><option>LYS</option>
-      <option>ARG</option><option>GLU</option><option>THR</option><option>GLN</option>
-      <option>ASN</option><option>TYR</option><option>PHE</option><option>ILE</option>
-      <option>SER</option><option>CYS</option><option>MET</option><option>VAL</option>
-      <option>HIS</option><option>TRP</option><option>PRO</option>
-    </select>
+    <!-- Red 1: protein + dugme -->
+    <div class="controls-primary">
+      <input id="protein" class="protein-input" placeholder="Protein ID (npr. 1A17)">
+      <button type="button" onclick="loadGraph3D()">Prikaži</button>
+    </div>
 
-    <label for="type">Tip rastojanja:</label>
-    <select id="type">
-      <option value="prazno">–</option>
-      <option value="caca">Cα–Cα</option>
-      <option value="minbezh">MinBezH</option>
-      <option value="maxbezh">MaxBezH</option>
-    </select>
+    <!-- Red 2: AA chip selekcija -->
+    <div class="controls-aa">
+      <span class="filter-label">Aminokiselina</span>
+      <div class="aa-chips">
+        <button type="button" class="aa-chip" data-value="ALA">ALA</button>
+        <button type="button" class="aa-chip" data-value="ARG">ARG</button>
+        <button type="button" class="aa-chip" data-value="ASN">ASN</button>
+        <button type="button" class="aa-chip" data-value="ASP">ASP</button>
+        <button type="button" class="aa-chip" data-value="CYS">CYS</button>
+        <button type="button" class="aa-chip" data-value="GLN">GLN</button>
+        <button type="button" class="aa-chip" data-value="GLU">GLU</button>
+        <button type="button" class="aa-chip" data-value="GLY">GLY</button>
+        <button type="button" class="aa-chip" data-value="HIS">HIS</button>
+        <button type="button" class="aa-chip" data-value="ILE">ILE</button>
+        <button type="button" class="aa-chip" data-value="LEU">LEU</button>
+        <button type="button" class="aa-chip" data-value="LYS">LYS</button>
+        <button type="button" class="aa-chip" data-value="MET">MET</button>
+        <button type="button" class="aa-chip" data-value="PHE">PHE</button>
+        <button type="button" class="aa-chip" data-value="PRO">PRO</button>
+        <button type="button" class="aa-chip" data-value="SER">SER</button>
+        <button type="button" class="aa-chip" data-value="THR">THR</button>
+        <button type="button" class="aa-chip" data-value="TRP">TRP</button>
+        <button type="button" class="aa-chip" data-value="TYR">TYR</button>
+        <button type="button" class="aa-chip" data-value="VAL">VAL</button>
+      </div>
+      <div class="aa-chip-actions">
+        <button type="button" onclick="selectAllAa()">Sve</button>
+        <button type="button" onclick="clearAa()">Ništa</button>
+      </div>
+    </div>
 
-    <input id="maxdist" placeholder="Gornji prag (npr. 8.0)">
-    <input id="mindist" placeholder="Donji prag (opciono)">
+    <!-- Red 3: ostali filteri -->
+    <div class="controls-filters">
 
-    <label for="chain">Lanac:</label>
-    <select id="chain">
-      <option value="prazno">–</option>
-      <option>A</option><option>B</option><option>C</option><option>D</option>
-      <option>X</option><option>P</option><option>N</option><option>F</option>
-      <option>I</option><option>G</option><option>R</option>
-    </select>
+      <div class="filter-group">
+        <span class="filter-label">Tip rastojanja</span>
+        <select id="type">
+          <option value="prazno">–</option>
+          <option value="caca">Cα–Cα</option>
+          <option value="minbezh">MinBezH</option>
+          <option value="maxbezh">MaxBezH</option>
+        </select>
+      </div>
 
-    <button type="button" onclick="loadGraph3D()">Prikaži</button>
+      <div class="filter-group">
+        <span class="filter-label">Max (Å)</span>
+        <input id="maxdist" placeholder="npr. 8.0">
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Min (Å)</span>
+        <input id="mindist" placeholder="opciono">
+      </div>
+
+      <div class="filter-sep"></div>
+
+      <div class="filter-group">
+        <span class="filter-label">Sek. struktura</span>
+        <select id="ss">
+          <option value="prazno">–</option>
+          <option>-</option><option>H</option><option>T</option><option>S</option>
+          <option>E</option><option>G</option><option>B</option><option>I</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">k &nbsp;(|i–j| ≥ k)</span>
+        <input id="sek_dist" placeholder="npr. 5">
+      </div>
+
+      <div class="filter-sep"></div>
+
+      <div class="filter-group">
+        <span class="filter-label">Lanac</span>
+        <select id="chain">
+          <option value="prazno">–</option>
+          <option>A</option><option>B</option><option>C</option><option>D</option>
+          <option>X</option><option>P</option><option>N</option><option>F</option>
+          <option>I</option><option>G</option><option>R</option>
+        </select>
+      </div>
+
+    </div>
   </div>
 
   <!-- MAIN: Viewer + Stats sidebar -->
@@ -54,6 +113,7 @@
     <!-- LEFT: 3D Viewer panel -->
     <div id="graphPanel">
       <div id="viewer3d-wrapper">
+        <div class="viewer-protein-label" id="viewerLabel"></div>
         <div id="viewer3d"></div>
         <div id="loader3d">Učitavanje…</div>
         <div id="viewer-message"></div>
@@ -64,8 +124,32 @@
     <div id="statsPanel">
       <div class="panel-title">Statistike</div>
 
+      <!-- Globalne statistike baze -->
+      <div id="globalStatsCard" class="global-stats-card">
+        <div class="global-stats-title">Statistike baze</div>
+
+        <div class="global-stats-grid">
+          <div class="global-stat"><span class="gsval" id="gs-proteins"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Proteina</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-aa"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Aminokiselina</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-avglen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Avg dužina</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-medlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Median dužina</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-minlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Min dužina</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-maxlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Max dužina</span></div>
+        </div>
+
+        <div class="gs-section-title">Sekundarne strukture</div>
+        <div id="gs-ss-dist" class="gs-ss-dist"><span class="gs-dots"><span></span><span></span><span></span></span></div>
+
+        <div class="gs-section-title">Top aminokiseline</div>
+        <div id="gs-top-aa" class="gs-top-aa"><span class="gs-dots"><span></span><span></span><span></span></span></div>
+
+        <div class="gs-section-title">Statistike rastojanja</div>
+        <div id="gs-dist-stats" class="gs-dist-table-wrap"><span class="gs-dots"><span></span><span></span><span></span></span></div>
+      </div>
+
       <div class="tab-buttons">
         <button class="tab-btn active" type="button" data-tab="tabOverview">Overview</button>
+        <button class="tab-btn" type="button" data-tab="tabNode">Čvor</button>
         <button class="tab-btn" type="button" data-tab="tabSeq">Seq</button>
         <button class="tab-btn" type="button" data-tab="tabDistance">Distance</button>
         <button class="tab-btn" type="button" data-tab="tabSSPairs">SS pairs</button>
@@ -94,6 +178,33 @@
           <h3>Distance summary</h3>
           <div class="muted" id="distSummaryMeta">Klikni "Prikaži" da učitaš podatke.</div>
           <table id="distSummaryTable" style="margin-top:10px; display:none;">
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ČVOR -->
+      <div class="tab-content" id="tabNode" style="display:none;">
+        <div class="card" id="nodeDetailCard">
+          <div class="muted">Klikni na čvor u grafu.</div>
+        </div>
+        <div class="card" id="nodeFocusCard" style="display:none;">
+          <h3>Fokus analiza</h3>
+          <div id="nodeFocusContent"></div>
+        </div>
+        <div class="card" id="nodeNeighborsCard" style="display:none;">
+          <h3>Kontakti <span id="nodeNeighborCount" class="muted" style="font-weight:400;"></span></h3>
+          <table id="nodeNeighborsTable">
+            <thead>
+              <tr>
+                <th>AA</th>
+                <th class="num">Idx</th>
+                <th>Lanac</th>
+                <th>SS</th>
+                <th>Tip</th>
+                <th class="num">Dist (Å)</th>
+              </tr>
+            </thead>
             <tbody></tbody>
           </table>
         </div>

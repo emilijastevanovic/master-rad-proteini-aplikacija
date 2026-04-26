@@ -43,5 +43,5 @@ def close_driver():
 def run_query(query, **params):
     driver = get_driver()
     with driver.session(default_access_mode="READ") as session:
-        result = session.run(query, parameters=params, timeout=10)
+        result = session.run(query, parameters=params)
         return [r.data() for r in result]

@@ -1,18 +1,36 @@
+def _present(val):
+    return val is not None and val != "" and val not in ("prazno", "/")
+
+
 def build_graph3d_protein(p):
     params = {"protein": p["protein"]}
 
-    # node only grana - ako nisu zadati filteri 
+    has_ss = _present(p.get("ss"))
+    has_k  = _present(p.get("k"))
+
+    # node-only grana — nema edge filtera (k tera na edge granu)
     if (
-        p["aminoname"] == "" and
-        p["max_distance"] == "" and
-        p["min_distance"] == "" and
-        p["type"] == "prazno" 
+        not p.get("aminonames") and
+        not p.get("max_distance") and
+        not p.get("min_distance") and
+        not _present(p.get("type")) and
+        not has_k
     ):
         q = [
             "MATCH (a:AminoAcid)",
             "WHERE a.protein = $protein AND a.ca_coordinates IS NOT NULL",
-            """
-            RETURN
+        ]
+
+        if has_ss:
+            q.append("AND a.ss = $ss")
+            params["ss"] = p["ss"]
+
+        if _present(p.get("chain")):
+            q.append("AND a.chain = $chain")
+            params["chain"] = p["chain"]
+
+        q.append("""
+        RETURN
             a.protein AS protein,
             a.chain AS chain,
             a.index AS idx,
@@ -21,37 +39,43 @@ def build_graph3d_protein(p):
             a.ca_coordinates.x AS x,
             a.ca_coordinates.y AS y,
             a.ca_coordinates.z AS z
-            """
-        ]
+        """)
         return "\n".join(q), params
 
+    # edge grana
     q = [
         "MATCH (a1:AminoAcid)-[r:DISTANCE]->(a2:AminoAcid)",
         "WHERE a1.protein = $protein",
-        "AND a1.index < a2.index"
-
+        "AND a1.index < a2.index",
     ]
 
-    if p.get("chain") and p["chain"] != "prazno":
+    if _present(p.get("chain")):
         q.append("AND a1.chain = $chain AND a2.chain = $chain")
         params["chain"] = p["chain"]
 
-    if p["aminoname"] != "":
-        q.append("AND a1.name = $aminoname1 AND a2.name = $aminoname2")
-        params["aminoname1"] = p["aminoname"]
-        params["aminoname2"] = p["aminoname"]
+    if p.get("aminonames"):
+        q.append("AND a1.name IN $aminonames AND a2.name IN $aminonames")
+        params["aminonames"] = p["aminonames"]
 
-    if p["type"] != "prazno":
+    if _present(p.get("type")):
         q.append("AND r.type = $type")
         params["type"] = p["type"]
 
-    if p["max_distance"]:
+    if p.get("max_distance"):
         q.append("AND r.value <= $max_distance")
         params["max_distance"] = float(p["max_distance"])
 
-    if p["min_distance"]:
+    if p.get("min_distance"):
         q.append("AND r.value >= $min_distance")
         params["min_distance"] = float(p["min_distance"])
+
+    if has_ss:
+        q.append("AND a1.ss = $ss AND a2.ss = $ss")
+        params["ss"] = p["ss"]
+
+    if has_k:
+        q.append("AND abs(a1.index - a2.index) >= $k")
+        params["k"] = int(p["k"])
 
     q.append("""
     RETURN

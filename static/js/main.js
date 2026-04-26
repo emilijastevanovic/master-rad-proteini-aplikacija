@@ -18,6 +18,9 @@ let SEGMENTS_URL = null;
 
 let TOOLTIP_LOCKED = false;
 
+let GRAPH_DATA = null;
+let SELECTED_NODE_ID = null;
+
 let LAST_ANALYSIS_KEY = null;
 function analysisKey(protein, chain, type, maxdist, mindist) {
   return [protein, chain, type, maxdist, mindist].join("|");
@@ -70,7 +73,9 @@ async function loadGraph3D() {
   if (el) el.innerHTML = "";
 
   const protein   = document.getElementById("protein")?.value.trim() || "";
-  const aminoname = document.getElementById("aminoname")?.value.trim() || "";
+  const aminoname = [...document.querySelectorAll('.aa-chip.active')].map(x => x.dataset.value).join(",");
+  const ss = document.getElementById("ss")?.value.trim() || "prazno";
+  const sec_dist = document.getElementById("sek_dist")?.value.trim() || ""
   const type      = document.getElementById("type")?.value || "prazno";
   const maxdist   = document.getElementById("maxdist")?.value.trim() || "";
   const mindist   = document.getElementById("mindist")?.value.trim() || "";
@@ -157,6 +162,8 @@ async function loadGraph3D() {
       `/api/graph3d/?protein=${encodeURIComponent(protein)}` +
       `&aminoname=${encodeURIComponent(aminoname)}` +
       `&chain=${encodeURIComponent(chain)}` +
+      `&ss=${encodeURIComponent(ss)}` +
+      `&k=${encodeURIComponent(sec_dist)}` +
       `&type=${encodeURIComponent(type)}` +
       `&max_distance=${encodeURIComponent(maxdist)}` +
       `&min_distance=${encodeURIComponent(mindist)}`;
@@ -224,79 +231,33 @@ async function loadGraph3D() {
     };
     const defaultColor = 0x9e9e9e;
 
-    // spheres
+    // sačuvaj sve podatke za re-rendering
     nodes.forEach(n => {
       n._x = (n.x - cx) * SCALE;
       n._y = (n.y - cy) * SCALE;
       n._z = (n.z - cz) * SCALE;
-
       n._aa = n.aa;
       n._index = n.index;
       n._protein = n.protein;
       n._chain = n.chain;
       n._ss = n.ss;
-
-      viewer.addSphere({
-        center: { x: n._x, y: n._y, z: n._z },
-        radius: 0.7,
-        color: aaColorMap3d[n.aa] || defaultColor,
-        clickable: true,
-        callback: function(atom, viewer, event) {
-          console.log("SPHERE CALLBACK FIRED", n._aa, n._index, event);
-          if (event) event.stopPropagation();
-          
-          TOOLTIP_LOCKED = true;
-          const x = (event && typeof event.clientX === "number") ? event.clientX : NaN;
-          const y = (event && typeof event.clientY === "number") ? event.clientY : NaN;
-        
-          const html = `
-            <b>${n._aa}${n._index}</b><br>
-            Protein: ${n._protein}<br>
-            Lanac: ${n._chain}<br>
-            SS: ${n._ss || "-"}
-          `;
-          showSphereTooltip(x, y, html);
-        }
-      });
     });
 
-    // edges
-    edges.forEach(e => {
-      const a = nodeById[e.source];
-      const b = nodeById[e.target];
-      if (!a || !b) return;
+    GRAPH_DATA = { nodes, edges, nodeById, viewer, aaColorMap3d, defaultColor };
+    SELECTED_NODE_ID = null;
 
-      const edgeColor =
-        e.type === "caca"    ? 0x1f77b4 :
-        e.type === "minbezh" ? 0x2ca02c :
-        e.type === "maxbezh" ? 0xd62728 :
-                               0x444444;
+    const lbl = document.getElementById("viewerLabel");
+    if (lbl) {
+      const typeLabel = { caca: "Cα–Cα", minbezh: "MinBezH", maxbezh: "MaxBezH" };
+      let parts = [protein.toUpperCase()];
+      if (type && type !== "prazno") parts.push(typeLabel[type] || type);
+      if (maxdist) parts.push(`≤ ${maxdist} Å`);
+      lbl.textContent = parts.join(" · ");
+      lbl.style.display = "block";
+    }
 
-      viewer.addCylinder({
-        start:    { x: a._x, y: a._y, z: a._z },
-        end:      { x: b._x, y: b._y, z: b._z },
-        radius:   0.08,
-        color:    edgeColor,
-        clickable: true,
-        callback: function(shape, viewer, event) {
-          if (event) event.stopPropagation();
-          TOOLTIP_LOCKED = true;
-          const x = (event && typeof event.clientX === "number") ? event.clientX : NaN;
-          const y = (event && typeof event.clientY === "number") ? event.clientY : NaN;
-
-          const html = `
-            <b>${a._aa}${a._index} — ${b._aa}${b._index}</b><br>
-            Tip: ${e.type || "–"}<br>
-            Rastojanje: ${e.value != null ? Number(e.value).toFixed(2) + " Å" : "–"}<br>
-            Lanac: ${a._chain}
-          `;
-          showSphereTooltip(x, y, html);
-        }
-      });
-    });
-
+    renderGraph(null);
     viewer.zoomTo();
-    viewer.render();
 
   } catch (err) {
     console.error("loadGraph3D failed", err);
@@ -597,22 +558,63 @@ async function loadDistanceSummary(protein, chain, type, maxdist, mindist) {
       return;
     }
 
-    const fmt = v => (v == null ? "–" : Number(v).toFixed(3));
-    const rows = [
-      ["Tip",       s.type],
-      ["Count",     s.count],
-      ["Mean",      fmt(s.mean) + " Å"],
-      ["Median",    fmt(s.median) + " Å"],
-      ["p95",       fmt(s.p95) + " Å"],
-      ["Min",       fmt(s.min) + " Å"],
-      ["Max",       fmt(s.max) + " Å"],
-      ["Pct < 8Å",  s.pct_lt_8 != null ? s.pct_lt_8.toFixed(1) + " %" : "–"],
+    const fmtA = v => (v == null ? "–" : Number(v).toFixed(3) + " Å");
+    const fmtP = v => (v == null ? "–" : Number(v).toFixed(1) + " %");
+
+    const sections = [
+      {
+        header: "Osnovno",
+        rows: [
+          ["Tip",    s.type],
+          ["Count",  s.count],
+        ],
+      },
+      {
+        header: "Centralna tendencija",
+        rows: [
+          ["Mean",   fmtA(s.mean)],
+          ["Median", fmtA(s.median)],
+          ["Std",    fmtA(s.std)],
+        ],
+      },
+      {
+        header: "Opseg",
+        rows: [
+          ["Min",  fmtA(s.min)],
+          ["Max",  fmtA(s.max)],
+        ],
+      },
+      {
+        header: "Percentili",
+        rows: [
+          ["p10",  fmtA(s.p10)],
+          ["p25",  fmtA(s.p25)],
+          ["p75",  fmtA(s.p75)],
+          ["p90",  fmtA(s.p90)],
+          ["p95",  fmtA(s.p95)],
+          ["p99",  fmtA(s.p99)],
+        ],
+      },
+      {
+        header: "Procenat kontakata ispod praga",
+        rows: [
+          ["< 5 Å",  fmtP(s.pct_lt_5)],
+          ["< 8 Å",  fmtP(s.pct_lt_8)],
+          ["< 10 Å", fmtP(s.pct_lt_10)],
+          ["< 15 Å", fmtP(s.pct_lt_15)],
+        ],
+      },
     ];
 
-    for (const [label, value] of rows) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${label}</td><td class="num">${value}</td>`;
-      tbody.appendChild(tr);
+    for (const section of sections) {
+      const th = document.createElement("tr");
+      th.innerHTML = `<td colspan="2" class="stat-section-header">${section.header}</td>`;
+      tbody.appendChild(th);
+      for (const [label, value] of section.rows) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${label}</td><td class="num">${value}</td>`;
+        tbody.appendChild(tr);
+      }
     }
 
     meta.textContent = "";
@@ -754,6 +756,338 @@ async function loadOutlierSS(protein, chain, type, maxdist, mindist) {
   }
 }
 
+// =========================
+//   GLOBAL STATS
+// =========================
+async function loadGlobalStats(attempt = 0) {
+  const MAX_ATTEMPTS = 5;
+  const DELAYS = [5000, 10000, 15000, 20000]; // ms između pokušaja
+  const fmt = n => {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+    if (n >= 1_000)     return (n / 1_000).toFixed(1) + "k";
+    return String(n);
+  };
+
+  const SS_COLORS = {
+    H: "#ff9f43", E: "#54a0ff", C: "#a0a0b8",
+    G: "#ff6b9d", B: "#00d2d3", I: "#feca57",
+    T: "#48dbfb", S: "#ff9ff3",
+  };
+
+  const setErr = (msg = "Neo4j nedostupan") => {
+    ["gs-proteins","gs-aa","gs-avglen","gs-medlen","gs-minlen","gs-maxlen"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = "!";
+    });
+    ["gs-ss-dist","gs-top-aa","gs-dist-stats"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = msg;
+    });
+  };
+
+  const retry = () => {
+    if (attempt < MAX_ATTEMPTS - 1) {
+      const delay = DELAYS[attempt] ?? DELAYS[DELAYS.length - 1];
+      setTimeout(() => loadGlobalStats(attempt + 1), delay);
+    } else {
+      setErr();
+    }
+  };
+
+  try {
+    const res = await fetch("/api/global_stats/");
+    if (!res.ok) { retry(); return; }
+    const d = await res.json();
+    if (d.error) { retry(); return; }
+
+    // --- top 4 boxovi ---
+    document.getElementById("gs-proteins").textContent = fmt(d.proteins    ?? 0);
+    document.getElementById("gs-aa").textContent       = fmt(d.amino_acids ?? 0);
+    document.getElementById("gs-avglen").textContent   = (d.avg_length    ?? "–") + " AA";
+    document.getElementById("gs-medlen").textContent   = (d.median_length ?? "–") + " AA";
+    document.getElementById("gs-minlen").textContent   = (d.min_length    ?? "–") + " AA";
+    document.getElementById("gs-maxlen").textContent   = (d.max_length    ?? "–") + " AA";
+
+    // --- SS distribucija ---
+    const ssEl = document.getElementById("gs-ss-dist");
+    if (ssEl && d.ss_distribution?.length) {
+      ssEl.innerHTML = d.ss_distribution.map(s => {
+        const color = SS_COLORS[s.ss] || "#888";
+        return `
+          <div class="gs-ss-row">
+            <span class="gs-ss-label">${s.ss}</span>
+            <div class="gs-ss-track">
+              <div class="gs-ss-fill" style="width:${s.pct}%;background:${color}"></div>
+            </div>
+            <span class="gs-ss-pct">${s.pct}%</span>
+          </div>`;
+      }).join("");
+    }
+
+    // --- top AA ---
+    const aaEl = document.getElementById("gs-top-aa");
+    if (aaEl && d.top_aa?.length) {
+      aaEl.innerHTML = d.top_aa.map(a =>
+        `<span class="gs-aa-chip">${a.name} <b>${a.pct}%</b></span>`
+      ).join("");
+    }
+
+    // --- distance stats tabela ---
+    const distEl = document.getElementById("gs-dist-stats");
+    if (distEl && d.dist_stats?.length) {
+      const rows = d.dist_stats.map(r => `
+        <tr>
+          <td class="gs-dt-type">${r.type}</td>
+          <td>${r.mean}</td>
+          <td>${r.std}</td>
+          <td>${r.min}</td>
+          <td>${r.max}</td>
+        </tr>`).join("");
+      distEl.innerHTML = `
+        <table class="gs-dist-table">
+          <thead><tr>
+            <th>tip</th><th>mean</th><th>std</th><th>min</th><th>max</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+  } catch (err) {
+    console.error("loadGlobalStats failed:", err);
+    retry();
+  }
+}
+
+// =========================
+//   GRAPH RENDERING
+// =========================
+function renderGraph(selectedNodeId) {
+  if (!GRAPH_DATA) return;
+  const { nodes, edges, nodeById, viewer, aaColorMap3d, defaultColor } = GRAPH_DATA;
+
+  SELECTED_NODE_ID = selectedNodeId;
+
+  // skup ID-ova direktnih suseda
+  const neighborIds = new Set();
+  if (selectedNodeId) {
+    edges.forEach(e => {
+      if (e.source === selectedNodeId) neighborIds.add(e.target);
+      if (e.target === selectedNodeId) neighborIds.add(e.source);
+    });
+  }
+
+  viewer.removeAllShapes();
+
+  // --- čvorovi ---
+  nodes.forEach(n => {
+    const isSelected = n.id === selectedNodeId;
+    const isNeighbor = neighborIds.has(n.id);
+    const dimmed     = selectedNodeId && !isSelected && !isNeighbor;
+
+    viewer.addSphere({
+      center:    { x: n._x, y: n._y, z: n._z },
+      radius:    isSelected ? 1.1 : 0.7,
+      color:     dimmed ? 0xcccccc : (aaColorMap3d[n._aa] || defaultColor),
+      opacity:   dimmed ? 0.2 : 1.0,
+      clickable: true,
+      callback: function(atom, v, event) {
+        if (event) event.stopPropagation();
+        TOOLTIP_LOCKED = true;
+        const x = event?.clientX ?? NaN;
+        const y = event?.clientY ?? NaN;
+        showSphereTooltip(x, y, `
+          <b>${n._aa}${n._index}</b><br>
+          Protein: ${n._protein}<br>
+          Lanac: ${n._chain}<br>
+          SS: ${n._ss || "–"}
+        `);
+        showNodeTab(n, edges, nodeById);
+        renderGraph(n.id);
+      },
+    });
+  });
+
+  // --- ivice ---
+  edges.forEach(e => {
+    const a = nodeById[e.source];
+    const b = nodeById[e.target];
+    if (!a || !b) return;
+
+    const connected = selectedNodeId &&
+      (e.source === selectedNodeId || e.target === selectedNodeId);
+    const dimmed = selectedNodeId && !connected;
+
+    const edgeColor = dimmed ? 0xcccccc :
+      e.type === "caca"    ? 0x1f77b4 :
+      e.type === "minbezh" ? 0x2ca02c :
+      e.type === "maxbezh" ? 0xd62728 : 0x444444;
+
+    viewer.addCylinder({
+      start:    { x: a._x, y: a._y, z: a._z },
+      end:      { x: b._x, y: b._y, z: b._z },
+      radius:   connected ? 0.13 : 0.08,
+      color:    edgeColor,
+      opacity:  dimmed ? 0.1 : 1.0,
+      clickable: !dimmed,
+      callback: dimmed ? null : function(shape, v, event) {
+        if (event) event.stopPropagation();
+        TOOLTIP_LOCKED = true;
+        const x = event?.clientX ?? NaN;
+        const y = event?.clientY ?? NaN;
+        showSphereTooltip(x, y, `
+          <b>${a._aa}${a._index} — ${b._aa}${b._index}</b><br>
+          Tip: ${e.type || "–"}<br>
+          Rastojanje: ${e.value != null ? Number(e.value).toFixed(2) + " Å" : "–"}<br>
+          Lanac: ${a._chain}
+        `);
+      },
+    });
+  });
+
+  viewer.render();
+}
+
+// =========================
+//   NODE TAB
+// =========================
+function switchToTab(tabId) {
+  document.querySelectorAll(".tab-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.tab === tabId);
+  });
+  document.querySelectorAll(".tab-content").forEach(t => {
+    t.style.display = t.id === tabId ? "block" : "none";
+  });
+}
+
+function showNodeTab(n, edges, nodeById) {
+  // detalji čvora
+  const detailCard = document.getElementById("nodeDetailCard");
+  if (detailCard) {
+    detailCard.innerHTML = `
+      <h3>${n._aa} <span style="font-weight:400;color:var(--muted);">#${n._index}</span></h3>
+      <table style="margin-top:6px;">
+        <tbody>
+          <tr><td>Protein</td><td class="num"><b>${n._protein}</b></td></tr>
+          <tr><td>Lanac</td><td class="num"><b>${n._chain}</b></td></tr>
+          <tr><td>Sek. struktura</td><td class="num"><b>${n._ss || "–"}</b></td></tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  // susedi
+  const neighbors = edges
+    .filter(e => e.source === n.id || e.target === n.id)
+    .map(e => {
+      const neighborId = e.source === n.id ? e.target : e.source;
+      const nb = nodeById[neighborId];
+      return { nb, type: e.type, value: e.value };
+    })
+    .filter(x => x.nb)
+    .sort((a, b) => (a.value ?? Infinity) - (b.value ?? Infinity));
+
+  const neighborsCard = document.getElementById("nodeNeighborsCard");
+  const countEl       = document.getElementById("nodeNeighborCount");
+  const tbody         = document.querySelector("#nodeNeighborsTable tbody");
+  const focusCard     = document.getElementById("nodeFocusCard");
+  const focusContent  = document.getElementById("nodeFocusContent");
+
+  if (!neighborsCard || !tbody) return;
+
+  if (!neighbors.length) {
+    neighborsCard.style.display = "none";
+    if (focusCard) focusCard.style.display = "none";
+  } else {
+    // --- tabela kontakata ---
+    countEl.textContent = `(${neighbors.length})`;
+    tbody.innerHTML = "";
+    for (const { nb, type, value } of neighbors) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><b>${nb.aa}</b></td>
+        <td class="num">${nb.index}</td>
+        <td>${nb.chain}</td>
+        <td>${nb.ss || "–"}</td>
+        <td>${type || "–"}</td>
+        <td class="num">${value != null ? Number(value).toFixed(3) : "–"}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    neighborsCard.style.display = "";
+
+    // --- fokus analiza ---
+    if (focusCard && focusContent) {
+      const dists = neighbors.map(x => x.value).filter(v => v != null).sort((a, b) => a - b);
+      let distHtml = "";
+      if (dists.length) {
+        const mean   = dists.reduce((s, v) => s + v, 0) / dists.length;
+        const med    = dists.length % 2 === 0
+          ? (dists[dists.length / 2 - 1] + dists[dists.length / 2]) / 2
+          : dists[Math.floor(dists.length / 2)];
+        const std    = Math.sqrt(dists.reduce((s, v) => s + (v - mean) ** 2, 0) / dists.length);
+        const f = v => v.toFixed(2);
+        distHtml = `
+          <div class="focus-section-title">Rastojanja do suseda (Å)</div>
+          <div class="focus-stat-grid">
+            <div class="focus-stat-cell"><span class="fsval">${f(dists[0])}</span><span class="fslbl">Min</span></div>
+            <div class="focus-stat-cell"><span class="fsval">${f(mean)}</span><span class="fslbl">Mean</span></div>
+            <div class="focus-stat-cell"><span class="fsval">${f(med)}</span><span class="fslbl">Median</span></div>
+            <div class="focus-stat-cell"><span class="fsval">${f(std)}</span><span class="fslbl">Std</span></div>
+            <div class="focus-stat-cell"><span class="fsval">${f(dists[dists.length - 1])}</span><span class="fslbl">Max</span></div>
+            <div class="focus-stat-cell"><span class="fsval">${dists.length}</span><span class="fslbl">Kontakata</span></div>
+          </div>
+        `;
+      }
+
+      // AA kompozicija susedstva
+      const aaCounts = {};
+      neighbors.forEach(({ nb }) => { aaCounts[nb.aa] = (aaCounts[nb.aa] || 0) + 1; });
+      const aaSorted = Object.entries(aaCounts).sort((a, b) => b[1] - a[1]);
+      const aaMax = aaSorted[0]?.[1] || 1;
+      const aaHtml = `
+        <div class="focus-section-title">AA kompozicija susedstva</div>
+        ${aaSorted.map(([aa, cnt]) => `
+          <div class="focus-bar-row">
+            <span class="focus-bar-label">${aa}</span>
+            <div class="focus-bar-track"><div class="focus-bar-fill" style="width:${(cnt/aaMax*100).toFixed(0)}%"></div></div>
+            <span class="focus-bar-count">${cnt} (${(cnt/neighbors.length*100).toFixed(0)}%)</span>
+          </div>`).join("")}
+      `;
+
+      // SS kompozicija susedstva
+      const ssCounts = {};
+      neighbors.forEach(({ nb }) => { const s = nb.ss || "–"; ssCounts[s] = (ssCounts[s] || 0) + 1; });
+      const ssSorted = Object.entries(ssCounts).sort((a, b) => b[1] - a[1]);
+      const ssMax = ssSorted[0]?.[1] || 1;
+      const ssHtml = `
+        <div class="focus-section-title">SS tipovi susedstva</div>
+        ${ssSorted.map(([ss, cnt]) => `
+          <div class="focus-bar-row">
+            <span class="focus-bar-label">${ss}</span>
+            <div class="focus-bar-track"><div class="focus-bar-fill ss-bar" style="width:${(cnt/ssMax*100).toFixed(0)}%"></div></div>
+            <span class="focus-bar-count">${cnt} (${(cnt/neighbors.length*100).toFixed(0)}%)</span>
+          </div>`).join("")}
+      `;
+
+      focusContent.innerHTML = distHtml + aaHtml + ssHtml;
+      focusCard.style.display = "";
+    }
+  }
+
+  switchToTab("tabNode");
+}
+
+// =========================
+//   AA CHIP SELEKCIJA
+// =========================
+function selectAllAa() {
+  document.querySelectorAll('.aa-chip').forEach(c => c.classList.add('active'));
+}
+
+function clearAa() {
+  document.querySelectorAll('.aa-chip').forEach(c => c.classList.remove('active'));
+}
+
 function ssToClass(ss) {
   if (ss === "H") return "ss-H";
   if (ss === "E") return "ss-E";
@@ -841,9 +1175,13 @@ document.addEventListener("DOMContentLoaded", () => {
     viewer.addEventListener("click", () => {
       if (TOOLTIP_LOCKED) {
         TOOLTIP_LOCKED = false;
-        return; // ← NE skrivaj tooltip odmah posle klika na sferu
+        return;
       }
       hideNodeTooltip();
+      if (SELECTED_NODE_ID !== null) {
+        SELECTED_NODE_ID = null;
+        renderGraph(null);
+      }
     });
   }
 
@@ -853,6 +1191,11 @@ document.addEventListener("DOMContentLoaded", () => {
       hideNodeTooltip();
       closeLightbox();
     }
+  });
+
+  // aa chip toggle
+  document.querySelectorAll('.aa-chip').forEach(chip => {
+    chip.addEventListener('click', () => chip.classList.toggle('active'));
   });
 
   // lightbox
@@ -875,4 +1218,5 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-
+// Script je na kraju <body> — DOM je spreman, pozivamo odmah
+loadGlobalStats();

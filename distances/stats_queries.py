@@ -138,21 +138,40 @@ def stat_distance_summary(protein, chain, type, max_distance, min_distance):
         WHERE a1.protein = $protein AND a2.protein = $protein
           AND a1.index < a2.index
           AND ($chain IS NULL OR a1.chain = $chain)
-        WITH count(d.value)                          AS total,
+        WITH collect(d.value) AS vals,
+             count(d.value)                          AS total,
              avg(d.value)                            AS mean,
-             percentileCont(d.value, 0.5)            AS median,
+             stdev(d.value)                          AS std,
+             percentileCont(d.value, 0.10)           AS p10,
+             percentileCont(d.value, 0.25)           AS p25,
+             percentileCont(d.value, 0.50)           AS median,
+             percentileCont(d.value, 0.75)           AS p75,
+             percentileCont(d.value, 0.90)           AS p90,
              percentileCont(d.value, 0.95)           AS p95,
+             percentileCont(d.value, 0.99)           AS p99,
              min(d.value)                            AS min_val,
              max(d.value)                            AS max_val,
-             sum(CASE WHEN d.value < 8.0 THEN 1 ELSE 0 END) AS cnt_lt_8
+             sum(CASE WHEN d.value <  5.0 THEN 1 ELSE 0 END) AS cnt_lt_5,
+             sum(CASE WHEN d.value <  8.0 THEN 1 ELSE 0 END) AS cnt_lt_8,
+             sum(CASE WHEN d.value < 10.0 THEN 1 ELSE 0 END) AS cnt_lt_10,
+             sum(CASE WHEN d.value < 15.0 THEN 1 ELSE 0 END) AS cnt_lt_15
         RETURN
-          total                                          AS count,
-          round(mean, 3)                                 AS mean,
-          round(median, 3)                               AS median,
-          round(p95, 3)                                  AS p95,
-          round(min_val, 3)                              AS min,
-          round(max_val, 3)                              AS max,
-          round(toFloat(cnt_lt_8) * 100 / total, 1)     AS pct_lt_8
+          total                                              AS count,
+          round(mean,   3)                                   AS mean,
+          round(std,    3)                                   AS std,
+          round(p10,    3)                                   AS p10,
+          round(p25,    3)                                   AS p25,
+          round(median, 3)                                   AS median,
+          round(p75,    3)                                   AS p75,
+          round(p90,    3)                                   AS p90,
+          round(p95,    3)                                   AS p95,
+          round(p99,    3)                                   AS p99,
+          round(min_val, 3)                                  AS min,
+          round(max_val, 3)                                  AS max,
+          round(toFloat(cnt_lt_5)  * 100 / total, 1)        AS pct_lt_5,
+          round(toFloat(cnt_lt_8)  * 100 / total, 1)        AS pct_lt_8,
+          round(toFloat(cnt_lt_10) * 100 / total, 1)        AS pct_lt_10,
+          round(toFloat(cnt_lt_15) * 100 / total, 1)        AS pct_lt_15
     """
 
     protein = protein.strip().upper()
