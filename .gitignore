@@ -47,3 +47,7 @@ dist/
 *.swo
 
 IMPROVEMENTS.txt
+
+# Local Neo4j dumps for Docker restore
+neo4j/backup/*
+!neo4j/backup/.gitkeep
