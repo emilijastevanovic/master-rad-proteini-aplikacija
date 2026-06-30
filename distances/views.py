@@ -1,24 +1,77 @@
 import hashlib
 import logging
 
+from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.core.cache import cache
 from neo4j.exceptions import Neo4jError
 
 from .neo4j_client import run_query
 from .query_builder import build_graph3d_protein
-from .stats_queries import stat_aa_composition, stat_aa_seq, stat_aa_heatmap_df, stat_ss_pairs, stat_segment_lengths, stat_distance_summary, stat_outlier_ss
+from .stats_queries import stat_aa_composition, stat_aa_seq, stat_aa_heatmap_df, stat_ss_pairs, stat_segment_lengths, stat_distance_summary, stat_outlier_ss, stat_ss_distribution
 from .protein_analysis import make_heat_maps, make_segment_hist_png
 
 logger = logging.getLogger(__name__)
 
+LATEX_HEATMAP_PROTEINS = {"1K3I", "1A17", "1G2Y", "1FEW"}
+LATEX_HEATMAP_DIR = settings.BASE_DIR / "latex_heatmaps"
+LATEX_SEGMENT_HIST_DIR = settings.BASE_DIR / "latex_segment_histograms"
+
 STAT_HANDLERS = {
     "aa_composition": stat_aa_composition,
+    "ss_distribution": stat_ss_distribution,
     "sequence": stat_aa_seq,
     "ss_pairs": stat_ss_pairs,
     "distance_summary": stat_distance_summary,
     "outlier_ss": stat_outlier_ss,
 }
+
+
+def _safe_filename_part(value, default="all"):
+    text = str(value or default).strip()
+    if not text or text == "prazno":
+        text = default
+
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in text)
+
+
+def save_latex_heatmap_png(png, protein, chain, type_, max_distance, min_distance):
+    protein = protein.strip().upper()
+    if protein not in LATEX_HEATMAP_PROTEINS:
+        return None
+
+    LATEX_HEATMAP_DIR.mkdir(parents=True, exist_ok=True)
+
+    filename = "_".join([
+        protein,
+        _safe_filename_part(chain),
+        _safe_filename_part(type_, "caca"),
+        f"max-{_safe_filename_part(max_distance)}",
+        f"min-{_safe_filename_part(min_distance)}",
+        "distance_heatmap.png",
+    ])
+    path = LATEX_HEATMAP_DIR / filename
+    path.write_bytes(png)
+    logger.info("saved LaTeX heatmap: %s", path)
+    return path
+
+
+def save_latex_segment_hist_png(png, protein, chain):
+    protein = protein.strip().upper()
+    if protein not in LATEX_HEATMAP_PROTEINS:
+        return None
+
+    LATEX_SEGMENT_HIST_DIR.mkdir(parents=True, exist_ok=True)
+
+    filename = "_".join([
+        protein,
+        _safe_filename_part(chain),
+        "segment_lengths_histogram.png",
+    ])
+    path = LATEX_SEGMENT_HIST_DIR / filename
+    path.write_bytes(png)
+    logger.info("saved LaTeX segment histogram: %s", path)
+    return path
 
 def graph3d_protein(request):
     protein = request.GET.get("protein")
@@ -171,12 +224,14 @@ def heatmap_distance(request):
     if not protein:
         return JsonResponse({"error": "protein parameter is required"}, status=400)
 
-    key_raw = f"{protein}|{chain}|{type_}"
+    protein = protein.strip().upper()
+    key_raw = f"{protein}|{chain}|{type_}|{max_distance}|{min_distance}"
     cache_key = "heatmap:" + hashlib.sha256(key_raw.encode("utf-8")).hexdigest()
 
     cached_png = cache.get(cache_key)
     if cached_png:
         logger.debug("heatmap cache hit: %s", cache_key)
+        save_latex_heatmap_png(cached_png, protein, chain, type_, max_distance, min_distance)
         return HttpResponse(cached_png, content_type="image/png")
 
     logger.debug("heatmap cache miss: %s", cache_key)
@@ -196,6 +251,7 @@ def heatmap_distance(request):
     png = imgs["distance_png"]
 
     cache.set(cache_key, png, timeout=60 * 60 * 24)
+    save_latex_heatmap_png(png, protein, chain, type_, max_distance, min_distance)
 
     return HttpResponse(png, content_type="image/png")
 
@@ -215,6 +271,7 @@ def segments_histogram(request):
     cached = cache.get(cache_key)
     if cached:
         logger.debug("segments cache hit: %s", cache_key)
+        save_latex_segment_hist_png(cached, protein, chain)
         return HttpResponse(cached, content_type="image/png")
 
     lengths = stat_segment_lengths(protein, chain)
@@ -223,6 +280,7 @@ def segments_histogram(request):
 
     png = make_segment_hist_png(lengths, protein=protein)
     cache.set(cache_key, png, timeout=60 * 60 * 24)
+    save_latex_segment_hist_png(png, protein, chain)
 
     return HttpResponse(png, content_type="image/png")
 

@@ -7,3 +7,18 @@ db.sqlite3
 staticfiles/
 .git/
 .gitignore
+.agents/
+.codex/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Neo4j data and dumps are mounted/managed outside the web image.
+neo4j/
+
+# Local/runtime artifacts.
+*.log
+*.sqlite3
+*.dump
+core
+core.*

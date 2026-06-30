@@ -28,6 +28,9 @@ services:
       - .env
     environment:
       NEO4J_URI: bolt://neo4j:7687
+    volumes:
+      - ./latex_heatmaps:/app/latex_heatmaps
+      - ./latex_segment_histograms:/app/latex_segment_histograms
     command: >
       sh -c "python manage.py migrate &&
              gunicorn proteinapp.wsgi:application --bind 0.0.0.0:8000 --workers 1 --timeout 300"

@@ -102,6 +102,13 @@ async function loadGraph3D() {
     if (distTable) distTable.style.display = "none";
     const distMeta = document.getElementById("distSummaryMeta");
     if (distMeta) distMeta.textContent = "Klikni \"Prikaži\" da učitaš podatke.";
+    const ssDistributionMeta = document.getElementById("ssDistributionMeta");
+    const ssDistributionTable = document.getElementById("ssDistributionTable");
+    if (ssDistributionMeta) ssDistributionMeta.textContent = "Klikni \"Prikaži\" da učitaš podatke.";
+    if (ssDistributionTable) {
+      ssDistributionTable.style.display = "none";
+      ssDistributionTable.querySelector("tbody").innerHTML = "";
+    }
     const seqEl = document.getElementById("aaSequenceTokens");
     const ssEl  = document.getElementById("ssTrackTokens");
     if (seqEl) seqEl.textContent = "Učitavanje...";
@@ -136,6 +143,7 @@ async function loadGraph3D() {
 
   // STATISTIKE
   loadAAComposition(protein, chain, type, maxdist, mindist);
+  loadSSDistribution(protein, chain, type, maxdist, mindist);
   loadSSPairs(protein, chain, type, maxdist, mindist);
   loadDistanceSummary(protein, chain, type, maxdist, mindist);
   loadOutlierSS(protein, chain, type, maxdist, mindist);
@@ -248,7 +256,7 @@ async function loadGraph3D() {
 
     const lbl = document.getElementById("viewerLabel");
     if (lbl) {
-      const typeLabel = { caca: "Cα–Cα", minbezh: "MinBezH", maxbezh: "MaxBezH" };
+      const typeLabel = { caca: "Cα–Cα", minbezh: "Min. bez H", maxbezh: "Maks. bez H" };
       let parts = [protein.toUpperCase()];
       if (type && type !== "prazno") parts.push(typeLabel[type] || type);
       if (maxdist) parts.push(`≤ ${maxdist} Å`);
@@ -279,7 +287,11 @@ async function loadAAComposition(protein, chain, type, maxdist, mindist) {
   tbody.innerHTML = "";
 
   try {
-    const url = `/api/stats/?protein=${encodeURIComponent(protein)}&type=${encodeURIComponent(type)}&include=aa_composition,sequence`;
+    const url =
+      `/api/stats/?protein=${encodeURIComponent(protein)}` +
+      `&chain=${encodeURIComponent(chain)}` +
+      `&type=${encodeURIComponent(type)}` +
+      `&include=aa_composition,sequence`;
     const res = await fetch(url);
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -328,6 +340,54 @@ async function loadAAComposition(protein, chain, type, maxdist, mindist) {
     meta.textContent = `Ukupno aminokiselina: ${total} · Prisutnih tipova: ${rows.length} / 20`;
   } catch (err) {
     console.error("loadAAComposition failed ❌", err);
+    meta.textContent = "Greška pri učitavanju (proveri konzolu).";
+  }
+}
+
+async function loadSSDistribution(protein, chain, type, maxdist, mindist) {
+  const meta = document.getElementById("ssDistributionMeta");
+  const table = document.getElementById("ssDistributionTable");
+  const tbody = table?.querySelector("tbody");
+
+  if (!meta || !table || !tbody) return;
+
+  meta.textContent = "Učitavanje...";
+  table.style.display = "none";
+  tbody.innerHTML = "";
+
+  try {
+    const url =
+      `/api/stats/?protein=${encodeURIComponent(protein)}` +
+      `&chain=${encodeURIComponent(chain)}` +
+      `&include=ss_distribution`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    const block = data.ss_distribution;
+    const rows = block?.ss_distribution || [];
+    const total = block?.total || 0;
+
+    if (!rows.length) {
+      meta.textContent = "Nema podataka o sekundarnoj strukturi za izabrani protein.";
+      return;
+    }
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.ss ?? "–"}</td>
+        <td class="num">${r.cnt ?? 0}</td>
+        <td class="num">${Number(r.pct ?? 0).toFixed(1)}%</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    meta.textContent = `Ukupno rezidua sa SS oznakom: ${total}`;
+    table.style.display = "";
+  } catch (err) {
+    console.error("loadSSDistribution failed", err);
     meta.textContent = "Greška pri učitavanju (proveri konzolu).";
   }
 }
@@ -463,7 +523,7 @@ function renderSegmentsImg() {
   const img = document.createElement("img");
   img.className = "seg-img zoomable";
   img.src = SEGMENTS_URL;
-  img.alt = "Segment length histogram";
+  img.alt = "Histogram dužina segmenata";
   img.style.width = "100%";
   img.style.borderRadius = "10px";
   img.style.marginTop = "10px";
@@ -488,7 +548,7 @@ function renderHeatmapsFromUrls() {
 
   if (!HEATMAP_URLS) {
     const muted = card.querySelector(".muted");
-    if (muted) muted.textContent = "Klikni “Prikaži” da učitaš heatmap.";
+    if (muted) muted.textContent = "Klikni “Prikaži” da učitaš toplotnu mapu.";
     return;
   }
 
@@ -510,7 +570,7 @@ function renderHeatmapsFromUrls() {
   const img1 = document.createElement("img");
   img1.className = "heatmap-img zoomable";
   img1.src = distance;
-  img1.alt = "Distance heatmap";
+  img1.alt = "Toplotna mapa rastojanja";
   img1.style.width = "100%";
   img1.style.borderRadius = "10px";
   img1.style.marginTop = "10px";
@@ -520,7 +580,7 @@ function renderHeatmapsFromUrls() {
     img1.remove();
     const err = document.createElement("div");
     err.className = "muted";
-    err.textContent = "Nema podataka za heatmap (izaberi tip rastojanja i klikni Prikaži).";
+    err.textContent = "Nema podataka za toplotnu mapu (izaberi tip rastojanja i klikni Prikaži).";
     card.appendChild(err);
   };
   card.appendChild(img1);
@@ -566,22 +626,22 @@ async function loadDistanceSummary(protein, chain, type, maxdist, mindist) {
         header: "Osnovno",
         rows: [
           ["Tip",    s.type],
-          ["Count",  s.count],
+          ["Broj",   s.count],
         ],
       },
       {
         header: "Centralna tendencija",
         rows: [
-          ["Mean",   fmtA(s.mean)],
-          ["Median", fmtA(s.median)],
-          ["Std",    fmtA(s.std)],
+          ["Prosek",   fmtA(s.mean)],
+          ["Medijana", fmtA(s.median)],
+          ["Std. devijacija", fmtA(s.std)],
         ],
       },
       {
         header: "Opseg",
         rows: [
-          ["Min",  fmtA(s.min)],
-          ["Max",  fmtA(s.max)],
+          ["Minimum",  fmtA(s.min)],
+          ["Maksimum", fmtA(s.max)],
         ],
       },
       {
@@ -846,7 +906,7 @@ async function loadGlobalStats(attempt = 0) {
       distEl.innerHTML = `
         <table class="gs-dist-table">
           <thead><tr>
-            <th>tip</th><th>mean</th><th>std</th><th>min</th><th>max</th>
+            <th>tip</th><th>prosek</th><th>std</th><th>min</th><th>maks</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
@@ -1030,10 +1090,10 @@ function showNodeTab(n, edges, nodeById) {
           <div class="focus-section-title">Rastojanja do suseda (Å)</div>
           <div class="focus-stat-grid">
             <div class="focus-stat-cell"><span class="fsval">${f(dists[0])}</span><span class="fslbl">Min</span></div>
-            <div class="focus-stat-cell"><span class="fsval">${f(mean)}</span><span class="fslbl">Mean</span></div>
-            <div class="focus-stat-cell"><span class="fsval">${f(med)}</span><span class="fslbl">Median</span></div>
+            <div class="focus-stat-cell"><span class="fsval">${f(mean)}</span><span class="fslbl">Prosek</span></div>
+            <div class="focus-stat-cell"><span class="fsval">${f(med)}</span><span class="fslbl">Medijana</span></div>
             <div class="focus-stat-cell"><span class="fsval">${f(std)}</span><span class="fslbl">Std</span></div>
-            <div class="focus-stat-cell"><span class="fsval">${f(dists[dists.length - 1])}</span><span class="fslbl">Max</span></div>
+            <div class="focus-stat-cell"><span class="fsval">${f(dists[dists.length - 1])}</span><span class="fslbl">Maks</span></div>
             <div class="focus-stat-cell"><span class="fsval">${dists.length}</span><span class="fslbl">Kontakata</span></div>
           </div>
         `;

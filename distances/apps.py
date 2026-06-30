@@ -2,6 +2,8 @@ from django.apps import AppConfig
 import atexit
 import threading
 import logging
+import os
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +14,17 @@ class DistancesConfig(AppConfig):
     def ready(self):
         from .neo4j_client import close_driver
         atexit.register(close_driver)
+        if _skip_global_stats_prewarm():
+            return
         threading.Thread(target=_prewarm_global_stats, daemon=True).start()
+
+
+def _skip_global_stats_prewarm():
+    if os.getenv("SKIP_GLOBAL_STATS_PREWARM") == "1":
+        return True
+
+    management_commands = {"collectstatic", "migrate", "makemigrations", "check", "test"}
+    return any(cmd in sys.argv for cmd in management_commands)
 
 
 def _prewarm_global_stats():

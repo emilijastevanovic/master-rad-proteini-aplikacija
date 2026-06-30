@@ -22,6 +22,8 @@ secret_key.txt
 # Static/media (adjust if you commit these)
 staticfiles/
 media/
+latex_heatmaps/
+latex_segment_histograms/
 
 # Environment
 .env

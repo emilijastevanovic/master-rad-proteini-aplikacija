@@ -45,6 +45,34 @@ def stat_aa_composition(protein, chain, type, max_distance, min_distance):
     }
 
 
+def stat_ss_distribution(protein, chain, type, max_distance, min_distance):
+    cypher = """
+        MATCH (aa:AminoAcid)
+        WHERE aa.protein = $protein
+          AND ($chain IS NULL OR aa.chain = $chain)
+          AND aa.ss IS NOT NULL
+        WITH aa.ss AS ss, count(*) AS cnt
+        WITH collect({ss: ss, cnt: cnt}) AS rows, sum(cnt) AS total
+        UNWIND rows AS row
+        RETURN row.ss AS ss, row.cnt AS cnt,
+               round(toFloat(row.cnt) * 100 / total, 1) AS pct,
+               total
+        ORDER BY row.cnt DESC
+    """
+
+    protein = protein.strip().upper()
+    rows = run_query(cypher, protein=protein, chain=chain or None)
+
+    total = rows[0]["total"] if rows else 0
+    distribution = [{"ss": r["ss"], "cnt": r["cnt"], "pct": r["pct"]} for r in rows]
+
+    return {
+        "protein": protein,
+        "total": total,
+        "ss_distribution": distribution,
+    }
+
+
 def stat_aa_seq(protein, chain, type, max_distance, min_distance):
 
     cypher1 = """

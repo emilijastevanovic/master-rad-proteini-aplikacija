@@ -2,7 +2,7 @@
 <html lang="sr">
 <head>
   <meta charset="UTF-8">
-  <title>Protein Graph Viewer</title>
+  <title>Vizuelizacija i analiza grafa aminokiselina</title>
 
   {% load static %}
   <link rel="stylesheet" href="{% static 'css/style.css' %}">
@@ -10,15 +10,14 @@
 
 <body>
 
-  <h1>Protein Graph Viewer</h1>
-  <p class="app-subtitle">Vizualizacija i analiza proteinskih struktura</p>
+  <h1>Vizuelizacija i analiza grafa aminokiselina</h1>
 
   <!-- Controls -->
   <div class="controls">
 
     <!-- Red 1: protein + dugme -->
     <div class="controls-primary">
-      <input id="protein" class="protein-input" placeholder="Protein ID (npr. 1A17)">
+      <input id="protein" class="protein-input" placeholder="ID proteina (npr. 1A17)">
       <button type="button" onclick="loadGraph3D()">Prikaži</button>
     </div>
 
@@ -61,18 +60,18 @@
         <select id="type">
           <option value="prazno">–</option>
           <option value="caca">Cα–Cα</option>
-          <option value="minbezh">MinBezH</option>
-          <option value="maxbezh">MaxBezH</option>
+          <option value="minbezh">Min. bez H</option>
+          <option value="maxbezh">Maks. bez H</option>
         </select>
       </div>
 
       <div class="filter-group">
-        <span class="filter-label">Max (Å)</span>
+        <span class="filter-label">Maks. (Å)</span>
         <input id="maxdist" placeholder="npr. 8.0">
       </div>
 
       <div class="filter-group">
-        <span class="filter-label">Min (Å)</span>
+        <span class="filter-label">Min. (Å)</span>
         <input id="mindist" placeholder="opciono">
       </div>
 
@@ -131,10 +130,10 @@
         <div class="global-stats-grid">
           <div class="global-stat"><span class="gsval" id="gs-proteins"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Proteina</span></div>
           <div class="global-stat"><span class="gsval" id="gs-aa"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Aminokiselina</span></div>
-          <div class="global-stat"><span class="gsval" id="gs-avglen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Avg dužina</span></div>
-          <div class="global-stat"><span class="gsval" id="gs-medlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Median dužina</span></div>
-          <div class="global-stat"><span class="gsval" id="gs-minlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Min dužina</span></div>
-          <div class="global-stat"><span class="gsval" id="gs-maxlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Max dužina</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-avglen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Prosečna dužina</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-medlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Medijana dužine</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-minlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Min. dužina</span></div>
+          <div class="global-stat"><span class="gsval" id="gs-maxlen"><span class="gs-dots"><span></span><span></span><span></span></span></span><span class="gslbl">Maks. dužina</span></div>
         </div>
 
         <div class="gs-section-title">Sekundarne strukture</div>
@@ -148,25 +147,38 @@
       </div>
 
       <div class="tab-buttons">
-        <button class="tab-btn active" type="button" data-tab="tabOverview">Overview</button>
+        <button class="tab-btn active" type="button" data-tab="tabOverview">Pregled</button>
         <button class="tab-btn" type="button" data-tab="tabNode">Čvor</button>
-        <button class="tab-btn" type="button" data-tab="tabSeq">Seq</button>
-        <button class="tab-btn" type="button" data-tab="tabDistance">Distance</button>
-        <button class="tab-btn" type="button" data-tab="tabSSPairs">SS pairs</button>
-        <button class="tab-btn" type="button" data-tab="tabSegments">Segments</button>
-        <button class="tab-btn" type="button" data-tab="tabOutliers">Outliers</button>
+        <button class="tab-btn" type="button" data-tab="tabSeq">Sekvenca</button>
+        <button class="tab-btn" type="button" data-tab="tabDistance">Rastojanja</button>
+        <button class="tab-btn" type="button" data-tab="tabSSPairs">SS parovi</button>
+        <button class="tab-btn" type="button" data-tab="tabSegments">Segmenti</button>
+        <button class="tab-btn" type="button" data-tab="tabOutliers">Odstupanja</button>
       </div>
 
       <!-- OVERVIEW -->
       <div class="tab-content" id="tabOverview">
         <div class="card">
-          <h3>AA composition</h3>
+          <h3>Sastav aminokiselina</h3>
           <div class="muted" id="aaStatsMeta">Klikni "Prikaži" da učitaš podatke.</div>
           <table id="aaStatsTable" style="margin-top: 10px;">
             <thead>
               <tr>
                 <th>AA</th>
-                <th class="num">Count</th>
+                <th class="num">Broj</th>
+                <th class="num">%</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+
+          <h3 style="margin-top:16px;">Raspodela sekundarne strukture</h3>
+          <div class="muted" id="ssDistributionMeta">Klikni "Prikaži" da učitaš podatke.</div>
+          <table id="ssDistributionTable" style="margin-top:10px; display:none;">
+            <thead>
+              <tr>
+                <th>SS</th>
+                <th class="num">Broj</th>
                 <th class="num">%</th>
               </tr>
             </thead>
@@ -175,7 +187,7 @@
         </div>
 
         <div class="card">
-          <h3>Distance summary</h3>
+          <h3>Pregled rastojanja</h3>
           <div class="muted" id="distSummaryMeta">Klikni "Prikaži" da učitaš podatke.</div>
           <table id="distSummaryTable" style="margin-top:10px; display:none;">
             <tbody></tbody>
@@ -198,11 +210,11 @@
             <thead>
               <tr>
                 <th>AA</th>
-                <th class="num">Idx</th>
+                <th class="num">Indeks</th>
                 <th>Lanac</th>
                 <th>SS</th>
                 <th>Tip</th>
-                <th class="num">Dist (Å)</th>
+                <th class="num">Rastojanje (Å)</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -218,7 +230,7 @@
         </div>
 
         <div class="card">
-          <h3>SS track</h3>
+          <h3>Tok sekundarne strukture</h3>
           <div class="seqTokens" id="ssTrackTokens">Klikni "Prikaži"...</div>
         </div>
       </div>
@@ -226,7 +238,7 @@
       <!-- DISTANCE -->
       <div class="tab-content" id="tabDistance" style="display:none;">
         <div class="card">
-          <h3>Heatmap distanci</h3>
+          <h3>Toplotna mapa rastojanja</h3>
           <div class="muted">Klikni "Prikaži" pa otvori ovaj tab.</div>
         </div>
       </div>
@@ -234,17 +246,17 @@
       <!-- SS PAIRS -->
       <div class="tab-content" id="tabSSPairs" style="display:none;">
         <div class="card">
-          <h3>SS pair statistike</h3>
+          <h3>Statistike SS parova</h3>
           <div class="muted" id="ssPairsMeta">Klikni "Prikaži" da učitaš podatke.</div>
           <table id="ssPairsTable" style="margin-top:10px; display:none;">
             <thead>
               <tr>
                 <th>SS par</th>
-                <th class="num">Count</th>
-                <th class="num">Mean (Å)</th>
-                <th class="num">Median (Å)</th>
+                <th class="num">Broj</th>
+                <th class="num">Prosek (Å)</th>
+                <th class="num">Medijana (Å)</th>
                 <th class="num">Min (Å)</th>
-                <th class="num">Max (Å)</th>
+                <th class="num">Maks. (Å)</th>
                 <th class="num">Std</th>
               </tr>
             </thead>
@@ -256,7 +268,7 @@
       <!-- SEGMENTS -->
       <div class="tab-content" id="tabSegments" style="display:none;">
         <div class="card">
-          <h3>Segment lengths</h3>
+          <h3>Dužine segmenata</h3>
           <div class="muted">Klikni "Prikaži" pa otvori ovaj tab.</div>
         </div>
       </div>
@@ -271,10 +283,10 @@
               <tr>
                 <th>SS</th>
                 <th class="num">N rezidua</th>
-                <th class="num">Mean (Å)</th>
-                <th class="num">Median (Å)</th>
+                <th class="num">Prosek (Å)</th>
+                <th class="num">Medijana (Å)</th>
                 <th class="num">p90 (Å)</th>
-                <th class="num">Max (Å)</th>
+                <th class="num">Maks. (Å)</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -288,10 +300,10 @@
             <thead>
               <tr>
                 <th>AA</th>
-                <th class="num">Index</th>
+                <th class="num">Indeks</th>
                 <th>Lanac</th>
                 <th>SS</th>
-                <th class="num">Avg dist (Å)</th>
+                <th class="num">Prosečno rastojanje (Å)</th>
               </tr>
             </thead>
             <tbody></tbody>

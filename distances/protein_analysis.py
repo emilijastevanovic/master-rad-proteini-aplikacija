@@ -366,7 +366,9 @@ def make_heat_maps(df: pd.DataFrame, protein: str, threshold: float = 8):
   # ----------------------------
   fig1, ax1 = plt.subplots(figsize=(12, 10))
   sns.heatmap(M, cmap="viridis", square=True, ax=ax1)
-  ax1.set_title(f"Distance matrix {protein}")
+  ax1.set_title(f"Matrica rastojanja — {protein}")
+  ax1.set_xlabel("Aminokiselina")
+  ax1.set_ylabel("Aminokiselina")
   fig1.tight_layout()
 
   buf1 = io.BytesIO()
@@ -382,7 +384,9 @@ def make_heat_maps(df: pd.DataFrame, protein: str, threshold: float = 8):
 
   fig2, ax2 = plt.subplots(figsize=(12, 10))
   sns.heatmap(contact, cmap="Greys", square=True, ax=ax2)
-  ax2.set_title(f"Contact map (<= {threshold}Å) {protein}")
+  ax2.set_title(f"Mapa kontakata (<= {threshold} Å) — {protein}")
+  ax2.set_xlabel("Aminokiselina")
+  ax2.set_ylabel("Aminokiselina")
   fig2.tight_layout()
 
   buf2 = io.BytesIO()
@@ -431,7 +435,7 @@ def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
 def make_segment_hist_png(segment_lengths: list, protein: str, bins: int = 30) -> bytes:
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.hist(segment_lengths, bins=bins, color="#1f77b4", edgecolor="white")
-    ax.set_title(f"Segment length distribution — {protein}")
+    ax.set_title(f"Raspodela dužina segmenata — {protein}")
     ax.set_xlabel("Dužina segmenta (br. rezidua)")
     ax.set_ylabel("Broj pojavljivanja")
     fig.tight_layout()
