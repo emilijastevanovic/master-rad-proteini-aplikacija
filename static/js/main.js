@@ -20,6 +20,8 @@ let TOOLTIP_LOCKED = false;
 
 let GRAPH_DATA = null;
 let SELECTED_NODE_ID = null;
+let GRAPH_LOAD_ID = 0;
+let GRAPH_ABORT_CONTROLLER = null;
 
 let LAST_ANALYSIS_KEY = null;
 function analysisKey(protein, chain, type, maxdist, mindist) {
@@ -63,6 +65,14 @@ function showSphereTooltip(pixelX, pixelY, html) {
 // =========================
 async function loadGraph3D() {
   console.log("loadGraph3D CALLED");
+  const loadId = ++GRAPH_LOAD_ID;
+
+  // Samo poslednji klik sme da zavrsi render. Bez ovoga sporiji odgovor za
+  // prethodno izabrani protein moze da stigne kasnije i pregazi novi prikaz.
+  if (GRAPH_ABORT_CONTROLLER) GRAPH_ABORT_CONTROLLER.abort();
+  GRAPH_ABORT_CONTROLLER = new AbortController();
+  const { signal } = GRAPH_ABORT_CONTROLLER;
+
   const tooltip = document.getElementById("nodeTooltip");
   if (tooltip) tooltip.style.visibility = "hidden";
 
@@ -71,8 +81,12 @@ async function loadGraph3D() {
 
   const el = document.getElementById("viewer3d");
   if (el) el.innerHTML = "";
+  GRAPH_DATA = null;
+  SELECTED_NODE_ID = null;
 
-  const protein   = document.getElementById("protein")?.value.trim() || "";
+  const proteinInput = document.getElementById("protein");
+  const protein   = proteinInput?.value.trim().toUpperCase() || "";
+  if (proteinInput) proteinInput.value = protein;
   const aminoname = [...document.querySelectorAll('.aa-chip.active')].map(x => x.dataset.value).join(",");
   const ss = document.getElementById("ss")?.value.trim() || "prazno";
   const sec_dist = document.getElementById("sek_dist")?.value.trim() || ""
@@ -178,12 +192,14 @@ async function loadGraph3D() {
 
     console.log("Fetching graph:", url);
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal });
+    if (loadId !== GRAPH_LOAD_ID) return;
     if (!res.ok) {
       throw new Error(`HTTP ${res.status} ${res.statusText}`);
     }
 
     const json = await res.json();
+    if (loadId !== GRAPH_LOAD_ID) return;
     const nodes = json.nodes || [];
     const edges = json.edges || [];
 
@@ -268,10 +284,14 @@ async function loadGraph3D() {
     viewer.zoomTo();
 
   } catch (err) {
+    if (err.name === "AbortError" || loadId !== GRAPH_LOAD_ID) return;
     console.error("loadGraph3D failed", err);
     showViewerMessage("Greška pri učitavanju grafa.", true);
   } finally {
-    if (loader) loader.style.visibility = "hidden";
+    if (loadId === GRAPH_LOAD_ID) {
+      if (loader) loader.style.visibility = "hidden";
+      GRAPH_ABORT_CONTROLLER = null;
+    }
   }
 }
 

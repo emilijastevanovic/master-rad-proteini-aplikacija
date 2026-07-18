@@ -77,6 +77,9 @@ def graph3d_protein(request):
     protein = request.GET.get("protein")
     if not protein:
         return JsonResponse({"error": "protein parameter is required"}, status=400)
+    protein = protein.strip().upper()
+    if not protein:
+        return JsonResponse({"error": "protein parameter is required"}, status=400)
 
     aminoname_raw = request.GET.get("aminoname", "")
     params = {
