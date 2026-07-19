@@ -28,6 +28,7 @@ latex_segment_histograms/
 # Environment
 .env
 .env.*
+!.env.example
 
 # Editors/OS
 .vscode/
