@@ -1,7 +1,6 @@
 from django.urls import path
 from . import views 
 
-# putanja, hendler, ime
 urlpatterns = [
     path("graph3d/", views.graph3d_protein, name="api_graph3d"),
     path("stats/", views.stats, name="api_stats"),

@@ -96,12 +96,10 @@ def graph3d_protein(request):
     nodes = {}
     edges = []
 
-    # generiše Cypher i parametre
     q, cy_params = build_graph3d_protein(params)
 
     logger.debug("cypher: %s | params: %s", q, cy_params)
 
-    # izvršavanje Neo4j upita
     try:
         rows = run_query(q, **cy_params)
     except (RuntimeError, Neo4jError) as e:
@@ -110,9 +108,7 @@ def graph3d_protein(request):
 
     for r in rows:
 
-        # --- NODES ---
         if "idx" in r:  
-            # slučaj bez distance (samo a)
             nid = f"{r['protein']}:{r['chain']}:{r['idx']}"
             if nid not in nodes:
                 nodes[nid] = {
@@ -128,11 +124,9 @@ def graph3d_protein(request):
                 }
 
         else:
-            # slučaj DISTANCE (a1, a2)
             n1 = f"{r['protein']}:{r['chain']}:{r['index']}"
             n2 = f"{r['protein2']}:{r['chain2']}:{r['index2']}"
 
-            # NODE 1
             if n1 not in nodes:
                 nodes[n1] = {
                     "id": n1,
@@ -146,7 +140,6 @@ def graph3d_protein(request):
                     "z": r.get("z"),
                 }
 
-            # NODE 2
             if n2 not in nodes:
                 nodes[n2] = {
                     "id": n2,
@@ -160,7 +153,6 @@ def graph3d_protein(request):
                     "z": r.get("z2"),
                 }
 
-            # --- EDGES ---
             edge_id = f"{n1}--{n2}"
             edges.append({
                 "id": edge_id,
@@ -190,7 +182,6 @@ def stats(request):
     if include:
         requested = [x.strip() for x in include.split(",") if x.strip()]
     else:
-        # default: učitaj samo ovo odmah
         requested = ["aa_composition"]
 
     out = {"protein": protein, "chain": chain or None}
@@ -221,20 +212,17 @@ def heatmap_distance(request):
     type_ = request.GET.get("type", "caca")
     if not type_ or type_ == "prazno":
         type_ = "caca"
-    max_distance = request.GET.get("max_distance")
-    min_distance = request.GET.get("min_distance")
-
     if not protein:
         return JsonResponse({"error": "protein parameter is required"}, status=400)
 
     protein = protein.strip().upper()
-    key_raw = f"{protein}|{chain}|{type_}|{max_distance}|{min_distance}"
+    key_raw = f"{protein}|{chain}|{type_}"
     cache_key = "heatmap:" + hashlib.sha256(key_raw.encode("utf-8")).hexdigest()
 
     cached_png = cache.get(cache_key)
     if cached_png:
         logger.debug("heatmap cache hit: %s", cache_key)
-        save_latex_heatmap_png(cached_png, protein, chain, type_, max_distance, min_distance)
+        save_latex_heatmap_png(cached_png, protein, chain, type_, None, None)
         return HttpResponse(cached_png, content_type="image/png")
 
     logger.debug("heatmap cache miss: %s", cache_key)
@@ -243,18 +231,18 @@ def heatmap_distance(request):
         protein=protein,
         chain=chain,
         type=type_,
-        max_distance=max_distance,
-        min_distance=min_distance
+        max_distance=None,
+        min_distance=None
     )
 
     if df.empty or "aa1" not in df.columns:
         return JsonResponse({"error": "no_data", "detail": "No distance data found for this protein/chain/type."}, status=404)
 
-    imgs = make_heat_maps(df, protein=protein, threshold=8)
+    imgs = make_heat_maps(df, protein=protein)
     png = imgs["distance_png"]
 
     cache.set(cache_key, png, timeout=60 * 60 * 24)
-    save_latex_heatmap_png(png, protein, chain, type_, max_distance, min_distance)
+    save_latex_heatmap_png(png, protein, chain, type_, None, None)
 
     return HttpResponse(png, content_type="image/png")
 
@@ -294,7 +282,6 @@ def global_stats(request):
         return JsonResponse(cached)
 
     try:
-        # protein/AA agregatne statistike — dužina po lancu
         aa_row = run_query("""
             MATCH (a:AminoAcid)
             WITH a.protein AS p, a.chain AS c, count(a) AS len
@@ -306,7 +293,6 @@ def global_stats(request):
                    max(len)                            AS max_len
         """)
 
-        # distribucija sekundarnih struktura
         ss_rows = run_query("""
             MATCH (a:AminoAcid)
             WHERE a.ss IS NOT NULL
@@ -314,7 +300,6 @@ def global_stats(request):
             ORDER BY n DESC
         """)
 
-        # top 5 aminokiselina u celoj bazi
         top_aa_rows = run_query("""
             MATCH (a:AminoAcid)
             WITH a.name AS name, count(a) AS n
@@ -323,7 +308,6 @@ def global_stats(request):
             RETURN name, n
         """)
 
-        # statistike rastojanja po tipu — jedan sken svih DISTANCE
         dist_rows = run_query("""
             MATCH ()-[r:DISTANCE]->()
             RETURN r.type AS type,

@@ -12,16 +12,13 @@
 
   <h1>Vizuelizacija i analiza grafa aminokiselina</h1>
 
-  <!-- Controls -->
   <div class="controls">
 
-    <!-- Red 1: protein + dugme -->
     <div class="controls-primary">
       <input id="protein" class="protein-input" placeholder="ID proteina (npr. 1A17)">
       <button type="button" onclick="loadGraph3D()">Prikaži</button>
     </div>
 
-    <!-- Red 2: AA chip selekcija -->
     <div class="controls-aa">
       <span class="filter-label">Aminokiselina</span>
       <div class="aa-chips">
@@ -52,7 +49,6 @@
       </div>
     </div>
 
-    <!-- Red 3: ostali filteri -->
     <div class="controls-filters">
 
       <div class="filter-group">
@@ -106,10 +102,8 @@
     </div>
   </div>
 
-  <!-- MAIN: Viewer + Stats sidebar -->
   <div class="layout">
 
-    <!-- LEFT: 3D Viewer panel -->
     <div id="graphPanel">
       <div id="viewer3d-wrapper">
         <div class="viewer-protein-label" id="viewerLabel"></div>
@@ -119,11 +113,9 @@
       </div>
     </div>
 
-    <!-- RIGHT: Stats panel -->
     <div id="statsPanel">
       <div class="panel-title">Statistike</div>
 
-      <!-- Globalne statistike baze -->
       <div id="globalStatsCard" class="global-stats-card">
         <div class="global-stats-title">Statistike baze</div>
 
@@ -156,7 +148,6 @@
         <button class="tab-btn" type="button" data-tab="tabOutliers">Odstupanja</button>
       </div>
 
-      <!-- OVERVIEW -->
       <div class="tab-content" id="tabOverview">
         <div class="card">
           <h3>Sastav aminokiselina</h3>
@@ -195,7 +186,6 @@
         </div>
       </div>
 
-      <!-- ČVOR -->
       <div class="tab-content" id="tabNode" style="display:none;">
         <div class="card" id="nodeDetailCard">
           <div class="muted">Klikni na čvor u grafu.</div>
@@ -222,7 +212,6 @@
         </div>
       </div>
 
-      <!-- SEQ -->
       <div class="tab-content" id="tabSeq" style="display:none;">
         <div class="card">
           <h3>Primarna sekvenca</h3>
@@ -235,7 +224,6 @@
         </div>
       </div>
 
-      <!-- DISTANCE -->
       <div class="tab-content" id="tabDistance" style="display:none;">
         <div class="card">
           <h3>Toplotna mapa rastojanja</h3>
@@ -243,7 +231,6 @@
         </div>
       </div>
 
-      <!-- SS PAIRS -->
       <div class="tab-content" id="tabSSPairs" style="display:none;">
         <div class="card">
           <h3>Statistike SS parova</h3>
@@ -265,7 +252,6 @@
         </div>
       </div>
 
-      <!-- SEGMENTS -->
       <div class="tab-content" id="tabSegments" style="display:none;">
         <div class="card">
           <h3>Dužine segmenata</h3>
@@ -273,7 +259,6 @@
         </div>
       </div>
 
-      <!-- OUTLIERS -->
       <div class="tab-content" id="tabOutliers" style="display:none;">
         <div class="card">
           <h3>Prosečno rastojanje po SS tipu</h3>
@@ -317,10 +302,8 @@
   <div id="nodeTooltip"></div>
   <div id="lightbox"><img id="lightboxImg" src="" alt=""></div>
 
-  <!-- Libs -->
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
 
-  <!-- App JS -->
   <script src="{% static 'js/main.js' %}"></script>
 
 </body>

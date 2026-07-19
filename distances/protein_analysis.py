@@ -18,7 +18,6 @@ def make_residual_level_df(df:pd.DataFrame) -> pd.DataFrame:
   """
   df = df.copy()
 
-# jedna strana
   res1 = (
     df[["protein", "lanacaa1", "aa1", "indeksaa1", "ss1", "idss1", "sclass1"]]
     .rename(columns={
@@ -31,7 +30,6 @@ def make_residual_level_df(df:pd.DataFrame) -> pd.DataFrame:
     })
   )
 
-  # druga strana
   res2 = (
     df[["protein", "lanacaa2", "aa2", "indeksaa2", "ss2", "idss2", "sclass2"]]
     .rename(columns={
@@ -44,12 +42,10 @@ def make_residual_level_df(df:pd.DataFrame) -> pd.DataFrame:
     })
   )
 
-  # spajanje i uklanjanje duplikata
   res = pd.concat([res1, res2], ignore_index=True).drop_duplicates(
     subset=["protein", "lanac", "indeks"]
   ).reset_index(drop=True)
 
-  # cvor obelezje
   res["node"] = res["lanac"].astype(str) + ":" + res["aa"].astype(str) + res["indeks"].astype(str)
 
 
@@ -78,7 +74,6 @@ def make_distance_statistic_df(
     add_outliers_iqr: bool = True
 ) -> pd.Series:
 
-    # uzmi rastojanja kao numeric i izbaci NaN
     x = pd.to_numeric(df[distance_col], errors="coerce").dropna().to_numpy()
     n_aa = len(make_residual_level_df(df))
     n = len(x)
@@ -87,7 +82,6 @@ def make_distance_statistic_df(
         med = np.median(arr)
         return np.median(np.abs(arr - med))
 
-    # ako nema podataka
     if n == 0:
         out = {"count": 0}
         for k in ["mean","std","min","q25","median","q75","iqr","max","mad"]:
@@ -120,15 +114,12 @@ def make_distance_statistic_df(
         "mad": float(_mad(x)),
     }
 
-    # percentili
     for p in percentiles:
         out[f"p{int(p):02d}"] = float(np.percentile(x, p))
 
-    # threshold procenat
     for t in thresholds:
         out[f"pct_lt_{t:g}"] = float(np.mean(x < t)) * 100.0
 
-    # outlieri po IQR
     if add_outliers_iqr:
         lower = q25 - 1.5 * iqr
         upper = q75 + 1.5 * iqr
@@ -165,7 +156,7 @@ def count_segments_by_ss(res: pd.DataFrame) -> pd.DataFrame:
     seg = (
         res.dropna(subset=["idss"])
         .groupby(["protein", "lanac", "idss"])["ss"]
-        .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[0])  # dominantni ss po segmentu
+        .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[0])
         .reset_index(name="segment_ss")
     )
 
@@ -177,7 +168,6 @@ def count_segments_by_ss(res: pd.DataFrame) -> pd.DataFrame:
     )
     return out
 
-# duzina svakog segmenta
 def segment_length_table(res: pd.DataFrame) -> pd.DataFrame:
     seg_len = (
         res.dropna(subset=["idss"])
@@ -214,7 +204,6 @@ def build_ss_string_with_gaps(chain_df: pd.DataFrame, ss_col="ss", index_col="in
     idx = chain_df[index_col].astype(int).to_numpy()
     ss_vals = chain_df[ss_col].to_numpy()
 
-    # map: indeks -> ss
     idx2ss = dict(zip(idx, ss_vals))
 
     start = idx.min()
@@ -245,7 +234,6 @@ def format_ss_track(ss_string: str,
     for offset in range(0, n, line_width):
         chunk = ss_string[offset: offset + line_width]
 
-        # index line
         idx_line = [" "] * len(chunk)
         for pos in range(0, len(chunk), tick_every):
             num = str(start_index + offset + pos)
@@ -258,11 +246,10 @@ def format_ss_track(ss_string: str,
 
         blocks.append(idx_line)
         blocks.append(ss_line)
-        blocks.append("")  # prazna linija izmedju blokova
+        blocks.append("")
 
     return "\n".join(blocks).rstrip()
 
-# uradjeno
 def print_ss_tracks(res: pd.DataFrame,
                     ss_col="ss",
                     index_col="indeks",
@@ -282,7 +269,6 @@ def print_ss_tracks(res: pd.DataFrame,
 
     res = res.copy()
 
-    # osiguraj numeric indeks
     res[index_col] = pd.to_numeric(res[index_col], errors="coerce")
 
     groups = res.dropna(subset=[protein_col, chain_col]).groupby([protein_col, chain_col], sort=True)
@@ -335,7 +321,7 @@ def plot_pie_from_percent_table(t: pd.DataFrame, name_col: str, value_col: str =
     wedges, texts, autotexts = ax.pie(
         values,
         labels=labels,
-        autopct=lambda p: f"{p:.1f}%" if p > 2 else "",  # sakrij sitne procente
+        autopct=lambda p: f"{p:.1f}%" if p > 2 else "",
         startangle=90
     )
     ax.set_title(title)
@@ -349,21 +335,16 @@ def plot_pie_from_percent_table(t: pd.DataFrame, name_col: str, value_col: str =
     plt.show()
 
 
-# uradjeno
-def make_heat_maps(df: pd.DataFrame, protein: str, threshold: float = 8):
+def make_heat_maps(df: pd.DataFrame, protein: str):
   M = make_heatmap_matrix(df)
 
   import re
-  # sortiranje po indeksu
   def extract_num(s):
     m = re.search(r"(\d+)$", s)
     return int(m.group(1)) if m else 10**9
 
   M = M.loc[sorted(M.index, key=extract_num), sorted(M.columns, key=extract_num)]
 
-  # ----------------------------
-  # 1) Distance heatmap -> PNG bytes
-  # ----------------------------
   fig1, ax1 = plt.subplots(figsize=(12, 10))
   sns.heatmap(M, cmap="viridis", square=True, ax=ax1)
   ax1.set_title(f"Matrica rastojanja — {protein}")
@@ -377,36 +358,16 @@ def make_heat_maps(df: pd.DataFrame, protein: str, threshold: float = 8):
   buf1.seek(0)
 
 
-  # ----------------------------
-  # 2) Contact heatmap -> PNG bytes
-  # ----------------------------
-  contact = (M <= threshold).astype(int)
-
-  fig2, ax2 = plt.subplots(figsize=(12, 10))
-  sns.heatmap(contact, cmap="Greys", square=True, ax=ax2)
-  ax2.set_title(f"Mapa kontakata (<= {threshold} Å) — {protein}")
-  ax2.set_xlabel("Aminokiselina")
-  ax2.set_ylabel("Aminokiselina")
-  fig2.tight_layout()
-
-  buf2 = io.BytesIO()
-  fig2.savefig(buf2, format="png", dpi=150, bbox_inches="tight")
-  plt.close(fig2)
-  buf2.seek(0)
-
   return {
         "distance_png": buf1.getvalue(),
-        #"contact_png": buf2.getvalue(),
     }
 
-# uradjeno
 def make_aa_string(df:pd.DataFrame) -> str:
     """
     Funkcija prima rezudial level DataFrame i vraca sekvencu aminokiselina.
     """
     return "-".join(list(df['aa']))
 
-# uradjeno
 def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
     """
     Funkcija prima kao argument DataFrame za odredjeni tip rastojanja i vraca po paru ss-ss statistike.
@@ -415,7 +376,6 @@ def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
     ss_pair_df["rastojanje"] = pd.to_numeric(ss_pair_df["rastojanje"], errors="coerce")
     ss_pair_df = ss_pair_df.dropna(subset=["rastojanje", "ss1", "ss2"])
 
-    # kanonski par (sortirano)
     ss_pair_df["ss_pair"] = list(map(tuple, np.sort(ss_pair_df[["ss1", "ss2"]].values, axis=1)))
 
     stats_df = (
@@ -425,7 +385,6 @@ def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
 
-    # (opciono) pretvori tuple u string
     stats_df["ss_pair"] = stats_df["ss_pair"].apply(lambda t: f"{t[0]} - {t[1]}")
     stats_df = stats_df.sort_values("count", ascending=False)
 

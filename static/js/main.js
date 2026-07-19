@@ -28,11 +28,6 @@ function analysisKey(protein, chain, type, maxdist, mindist) {
   return [protein, chain, type, maxdist, mindist].join("|");
 }
 
-// =========================
-//   SHOW TOOLTIP FUNCTION
-// =========================
-
-
 function showSphereTooltip(pixelX, pixelY, html) {
   const tooltip = document.getElementById("nodeTooltip");
   const wrapper = document.getElementById("viewer3d-wrapper");
@@ -60,9 +55,6 @@ function showSphereTooltip(pixelX, pixelY, html) {
 }
 
 
-// =========================
-//   3D GRAPH
-// =========================
 async function loadGraph3D() {
   console.log("loadGraph3D CALLED");
   const loadId = ++GRAPH_LOAD_ID;
@@ -428,15 +420,9 @@ async function prefetchSeq(protein, chain, type, maxdist, mindist) {
 
     const data = await res.json();
 
-    // očekujemo data.sequence = { protein, aa_seq, aa_ss_seq }
     const block = data.sequence;
     if (!block) return;
 
-    // **OVDE SPajamo AA + SS u jednu strukturu po poziciji**
-    // ako backend vraća liste rows1/rows2, onda:
-    //   aa_seq = [{name:"PRO"}, ...]
-    //   aa_ss_seq = [{ss:"H"}, ...]
-    // a ako vrati string, onda mora drugačije (spomenuću dole)
     const rows1 = block.aa_seq || [];
     const rows2 = block.aa_ss_seq || [];
 
@@ -503,14 +489,12 @@ function setHeatmapUrls(protein, chain, type, maxdist, mindist) {
   const p = encodeURIComponent(protein);
   const c = encodeURIComponent(chain);
   const t = encodeURIComponent(type);
-  const maxd = encodeURIComponent(maxdist);
-  const mind = encodeURIComponent(mindist);
 
   const stamp = Date.now(); // cache-bust
 
   HEATMAP_URLS = {
-    distance: `/api/heatmap/distance/?protein=${p}&chain=${c}&type=${t}&max_distance=${maxd}&min_distance=${mind}&_=${stamp}`,
-    meta: { protein, chain, type, maxdist, mindist }
+    distance: `/api/heatmap/distance/?protein=${p}&chain=${c}&type=${t}&_=${stamp}`,
+    meta: { protein, chain, type }
   };
 }
 
@@ -580,7 +564,20 @@ function renderHeatmapsFromUrls() {
   card.querySelectorAll("img.heatmap-img").forEach(x => x.remove());
   card.querySelectorAll(".heatmap-subtitle").forEach(x => x.remove());
 
-  const { distance } = HEATMAP_URLS;
+  const { distance, meta } = HEATMAP_URLS;
+
+  const typeLabels = {
+    caca: "Cα–Cα rastojanje",
+    minbezh: "Minimalno rastojanje bez H",
+    maxbezh: "Maksimalno rastojanje bez H",
+    prazno: "Cα–Cα rastojanje",
+  };
+  const typeLabel = typeLabels[meta?.type] || meta?.type || "Cα–Cα rastojanje";
+
+  const subtitle = document.createElement("div");
+  subtitle.className = "heatmap-subtitle";
+  subtitle.textContent = typeLabel;
+  card.appendChild(subtitle);
 
   const loading1 = document.createElement("div");
   loading1.className = "img-loading";
@@ -590,7 +587,7 @@ function renderHeatmapsFromUrls() {
   const img1 = document.createElement("img");
   img1.className = "heatmap-img zoomable";
   img1.src = distance;
-  img1.alt = "Toplotna mapa rastojanja";
+  img1.alt = `Toplotna mapa — ${typeLabel}`;
   img1.style.width = "100%";
   img1.style.borderRadius = "10px";
   img1.style.marginTop = "10px";

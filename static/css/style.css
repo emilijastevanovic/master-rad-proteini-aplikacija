@@ -256,6 +256,13 @@
     color: var(--muted);
     font-size: 0.9rem;
   }
+
+  .heatmap-subtitle {
+    margin: 4px 0 8px;
+    color: #374151;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
   
   /* Tables */
   table {

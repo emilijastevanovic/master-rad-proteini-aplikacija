@@ -108,7 +108,7 @@ def stat_aa_heatmap_df(protein, chain, type, max_distance, min_distance):
     cypher = """
         MATCH (a1:AminoAcid)-[d:DISTANCE{type:$type}]->(a2:AminoAcid)
         WHERE a1.protein = $protein AND a2.protein = $protein
-          AND ($chain IS NULL OR a1.chain = $chain)
+          AND ($chain IS NULL OR (a1.chain = $chain AND a2.chain = $chain))
         RETURN a1.name AS aa1, a1.index AS idx1, a2.name AS aa2, a2.index AS idx2, d.value AS distance
         ORDER BY a1.index, a2.index ASC
     """

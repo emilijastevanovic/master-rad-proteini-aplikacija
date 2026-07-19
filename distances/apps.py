@@ -29,7 +29,6 @@ def _skip_global_stats_prewarm():
 
 def _prewarm_global_stats():
     import time
-    # čeka da Neo4j bude spreman (do 60s)
     for attempt in range(6):
         try:
             from django.core.cache import cache
