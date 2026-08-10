@@ -393,7 +393,19 @@ def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
 
 def make_segment_hist_png(segment_lengths: list, protein: str, bins: int = 30) -> bytes:
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.hist(segment_lengths, bins=bins, color="#1f77b4", edgecolor="white")
+
+    # Dužine segmenata su celi brojevi. Kad je opseg uži od zadatog broja
+    # pregrada, poravnaj pregrade na cele brojeve — inače matplotlib razbije
+    # npr. opseg 1–8 na 30 pregrada, pa stupci ispadnu tanki i pomereni u
+    # odnosu na oznaku ispod njih.
+    lo, hi = min(segment_lengths), max(segment_lengths)
+    if hi - lo < bins:
+        edges = np.arange(lo - 0.5, hi + 1.5, 1.0)
+        ax.set_xticks(range(lo, hi + 1))
+    else:
+        edges = bins
+
+    ax.hist(segment_lengths, bins=edges, color="#1f77b4", edgecolor="white")
     ax.set_title(f"Raspodela dužina segmenata — {protein}")
     ax.set_xlabel("Dužina segmenta (br. rezidua)")
     ax.set_ylabel("Broj pojavljivanja")
