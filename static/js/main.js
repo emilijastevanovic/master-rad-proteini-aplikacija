@@ -187,7 +187,12 @@ async function loadGraph3D() {
     const res = await fetch(url, { signal });
     if (loadId !== GRAPH_LOAD_ID) return;
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      // 400 nosi objašnjenje šta je pogrešno uneto — prikaži ga korisniku
+      let detail = "";
+      try { detail = (await res.json())?.detail || ""; } catch (_) {}
+      const httpErr = new Error(detail || `HTTP ${res.status} ${res.statusText}`);
+      httpErr.userMessage = detail;
+      throw httpErr;
     }
 
     const json = await res.json();
@@ -279,7 +284,7 @@ async function loadGraph3D() {
   } catch (err) {
     if (err.name === "AbortError" || loadId !== GRAPH_LOAD_ID) return;
     console.error("loadGraph3D failed", err);
-    showViewerMessage("Greška pri učitavanju grafa.", true);
+    showViewerMessage(err.userMessage || "Greška pri učitavanju grafa.", true);
   } finally {
     if (loadId === GRAPH_LOAD_ID) {
       if (loader) loader.style.visibility = "hidden";
@@ -1169,10 +1174,38 @@ function clearAa() {
 
 function ssToClass(ss) {
   if (ss === "H") return "ss-H";
+  if (ss === "G") return "ss-G";
+  if (ss === "I") return "ss-I";
   if (ss === "E") return "ss-E";
+  if (ss === "B") return "ss-B";
   if (ss === "T") return "ss-T";
   if (ss === "S") return "ss-S";
   return "ss-dot";
+}
+
+// DSSP oznake — redosled je i redosled u legendi
+const SS_LEGEND = [
+  ["H", "α-heliks"],
+  ["G", "3₁₀-heliks"],
+  ["I", "π-heliks"],
+  ["E", "β-lanac"],
+  ["B", "β-most"],
+  ["T", "okret"],
+  ["S", "savijanje"],
+  ["-", "nesvrstano"],
+];
+
+function renderSsLegend() {
+  const box = document.getElementById("ssLegend");
+  if (!box || box.childElementCount) return;
+
+  for (const [code, label] of SS_LEGEND) {
+    const item = document.createElement("div");
+    item.className = "ss-legend-item";
+    item.innerHTML =
+      `<span class="ss-legend-key ${ssToClass(code)}">${code}</span><span>${label}</span>`;
+    box.appendChild(item);
+  }
 }
 
 const AA_HYDROPHOBIC = new Set(["ALA","VAL","ILE","LEU","MET","PHE","TRP","PRO","GLY"]);
@@ -1231,6 +1264,7 @@ function hideNodeTooltip() {
 document.addEventListener("DOMContentLoaded", () => {
   // 1) inicijalizuj tabove (ovo ti je falilo)
   setupTabs();
+  renderSsLegend();
 
   // 2) tooltip hide logika
   const tooltip = document.getElementById("nodeTooltip");

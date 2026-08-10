@@ -755,12 +755,45 @@
     border: 1px solid #e0e0e0;
   }
   
-/* SS track boje */
-.ss-H   { background: #fff0e0; border-top: 3px solid #ff7f0e; color: #7a3800; }
-.ss-E   { background: #e6f4e6; border-top: 3px solid #2ca02c; color: #145214; }
-.ss-T   { background: #fffbe0; border-top: 3px solid #d4a800; color: #6b5500; }
-.ss-S   { background: #f0e8ff; border-top: 3px solid #9467bd; color: #4a2080; }
-.ss-dot { background: #f2f2f2; border-top: 3px solid #bdbdbd; color: #666;   }
+/* SS track boje — DSSP oznake */
+.ss-H   { background: #fff0e0; border-top: 3px solid #ff7f0e; color: #7a3800; } /* alfa-heliks    */
+.ss-G   { background: #ffe8f0; border-top: 3px solid #e05c8a; color: #7a2040; } /* 3-10 heliks    */
+.ss-I   { background: #f3e0ff; border-top: 3px solid #a64ce0; color: #4a1070; } /* pi-heliks      */
+.ss-E   { background: #e6f4e6; border-top: 3px solid #2ca02c; color: #145214; } /* beta-lanac     */
+.ss-B   { background: #e0f0ea; border-top: 3px solid #17a589; color: #0b4a3c; } /* beta-most      */
+.ss-T   { background: #fffbe0; border-top: 3px solid #d4a800; color: #6b5500; } /* okret          */
+.ss-S   { background: #f0e8ff; border-top: 3px solid #9467bd; color: #4a2080; } /* savijanje      */
+.ss-dot { background: #f2f2f2; border-top: 3px solid #bdbdbd; color: #666;   } /* nesvrstano     */
+
+/* Legenda sekundarne strukture */
+.ss-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.ss-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #3a4149;
+}
+
+.ss-legend-key {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1px solid #e0e0e0;
+}
 
 /* AA sequence boje — po hemijskim svojstvima */
 .aa-hydrophobic { background: #fff3b0; border-top: 3px solid #e6b800; color: #5a4400; } /* A V I L M F W P G */
