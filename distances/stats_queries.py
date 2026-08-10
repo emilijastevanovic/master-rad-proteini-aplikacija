@@ -75,31 +75,26 @@ def stat_ss_distribution(protein, chain, type, max_distance, min_distance):
 
 def stat_aa_seq(protein, chain, type, max_distance, min_distance):
 
-    cypher1 = """
+    # Jedan upit za oba niza — front ih spaja po poziciji (SEQ_CACHE[i]),
+    # pa poravnanje mora biti garantovano istim skupom redova. Sa dva
+    # odvojena upita i ORDER BY samo po index-u, kod višelančanih proteina
+    # izjednačeni indeksi (A:1, B:1, ...) nisu deterministički poređani,
+    # što bi tiho pomerilo SS traku u odnosu na sekvencu.
+    cypher = """
         MATCH (aa:AminoAcid)
         WHERE aa.protein = $protein
           AND ($chain IS NULL OR aa.chain = $chain)
-        RETURN aa.name AS name
-        ORDER BY aa.index
-    """
-
-    cypher2 = """
-        MATCH (aa:AminoAcid)
-        WHERE aa.protein = $protein
-          AND ($chain IS NULL OR aa.chain = $chain)
-        RETURN aa.ss AS ss
-        ORDER BY aa.index
+        RETURN aa.name AS name, aa.ss AS ss
+        ORDER BY aa.chain, aa.index
     """
 
     protein = protein.strip().upper()
-    chain_param = chain or None
-    rows1 = run_query(cypher1, protein=protein, chain=chain_param)
-    rows2 = run_query(cypher2, protein=protein, chain=chain_param)
+    rows = run_query(cypher, protein=protein, chain=chain or None)
 
     return {
         "protein": protein,
-        "aa_seq": rows1,
-        "aa_ss_seq": rows2
+        "aa_seq": [{"name": r["name"]} for r in rows],
+        "aa_ss_seq": [{"ss": r["ss"]} for r in rows],
     }
 
 

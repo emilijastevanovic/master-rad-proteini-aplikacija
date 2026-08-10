@@ -292,6 +292,25 @@
   
   td.num, th.num { text-align: right; }
 
+  /* Tabele u bočnom panelu (380px) — kompaktnije + skrol umesto prelivanja preko kartice */
+  #statsPanel .card {
+    overflow-x: auto;
+  }
+
+  #statsPanel table {
+    font-size: 0.82rem;
+  }
+
+  #statsPanel thead th,
+  #statsPanel tbody td {
+    padding: 6px 5px;
+  }
+
+  #statsPanel thead th {
+    font-size: 0.75rem;
+    line-height: 1.15;
+  }
+
 /* ---------------------------
    Globalne statistike baze
 --------------------------- */
@@ -744,11 +763,11 @@
 .ss-dot { background: #f2f2f2; border-top: 3px solid #bdbdbd; color: #666;   }
 
 /* AA sequence boje — po hemijskim svojstvima */
-.aa-hydrophobic { background: #fff3b0; border-top: 3px solid #e6b800; color: #5a4400; } /* A V I L M F W P */
-.aa-polar       { background: #d4f0d4; border-top: 3px solid #4caf50; color: #1a4d1a; } /* S T C Y N Q    */
-.aa-positive    { background: #cce0ff; border-top: 3px solid #2979ff; color: #003380; } /* K R H          */
-.aa-negative    { background: #ffd5d5; border-top: 3px solid #e53935; color: #7a0000; } /* D E            */
-.aa-special     { background: #ececec; border-top: 3px solid #9e9e9e; color: #444;    } /* G              */
+.aa-hydrophobic { background: #fff3b0; border-top: 3px solid #e6b800; color: #5a4400; } /* A V I L M F W P G */
+.aa-polar       { background: #d4f0d4; border-top: 3px solid #4caf50; color: #1a4d1a; } /* S T C Y N Q      */
+.aa-positive    { background: #cce0ff; border-top: 3px solid #2979ff; color: #003380; } /* K R H            */
+.aa-negative    { background: #ffd5d5; border-top: 3px solid #e53935; color: #7a0000; } /* D E              */
+.aa-special     { background: #ececec; border-top: 3px solid #9e9e9e; color: #444;    } /* ostalo / nepoznato */
 
 /* ---------------------------
    Viewer inline message

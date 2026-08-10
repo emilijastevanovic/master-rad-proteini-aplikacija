@@ -232,9 +232,10 @@ async function loadGraph3D() {
     nodes.forEach(n => nodeById[n.id] = n);
 
     const aaColorMap3d = {
-      // hidrofobne — žuta
+      // nepolarne (hidrofobne) — žuta
       ALA: 0xe6b800, VAL: 0xe6b800, ILE: 0xe6b800, LEU: 0xe6b800,
       MET: 0xe6b800, PHE: 0xe6b800, TRP: 0xe6b800, PRO: 0xe6b800,
+      GLY: 0xe6b800,
       // polarne — zelena
       SER: 0x4caf50, THR: 0x4caf50, CYS: 0x4caf50, TYR: 0x4caf50,
       ASN: 0x4caf50, GLN: 0x4caf50,
@@ -242,8 +243,6 @@ async function loadGraph3D() {
       LYS: 0x2979ff, ARG: 0x2979ff, HIS: 0x2979ff,
       // negativne — crvena
       ASP: 0xe53935, GLU: 0xe53935,
-      // GLY — siva
-      GLY: 0x9e9e9e,
     };
     const defaultColor = 0x9e9e9e;
 
@@ -267,7 +266,9 @@ async function loadGraph3D() {
       const typeLabel = { caca: "Cα–Cα", minbezh: "Min. bez H", maxbezh: "Maks. bez H" };
       let parts = [protein.toUpperCase()];
       if (type && type !== "prazno") parts.push(typeLabel[type] || type);
-      if (maxdist) parts.push(`≤ ${maxdist} Å`);
+      if (mindist && maxdist) parts.push(`${mindist}–${maxdist} Å`);
+      else if (mindist) parts.push(`≥ ${mindist} Å`);
+      else if (maxdist) parts.push(`≤ ${maxdist} Å`);
       lbl.textContent = parts.join(" · ");
       lbl.style.display = "block";
     }
@@ -325,7 +326,8 @@ async function loadAAComposition(protein, chain, type, maxdist, mindist) {
       const aa = r.name ?? r.aa ?? "";
       const count = Number(r.cnt ?? r.count ?? 0);
 
-      const pct =  (total > 0 ? (count / total) * 100 : 0);
+      // procenat već izračunat u Cypheru (round(cnt*100/total, 1))
+      const pct = Number(r.pct ?? 0);
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -1173,7 +1175,7 @@ function ssToClass(ss) {
   return "ss-dot";
 }
 
-const AA_HYDROPHOBIC = new Set(["ALA","VAL","ILE","LEU","MET","PHE","TRP","PRO"]);
+const AA_HYDROPHOBIC = new Set(["ALA","VAL","ILE","LEU","MET","PHE","TRP","PRO","GLY"]);
 const AA_POLAR       = new Set(["SER","THR","CYS","TYR","ASN","GLN"]);
 const AA_POSITIVE    = new Set(["LYS","ARG","HIS"]);
 const AA_NEGATIVE    = new Set(["ASP","GLU"]);

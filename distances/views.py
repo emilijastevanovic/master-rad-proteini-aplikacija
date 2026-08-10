@@ -26,6 +26,52 @@ STAT_HANDLERS = {
     "outlier_ss": stat_outlier_ss,
 }
 
+STATS_CACHE_TTL = 60 * 60 * 6
+
+# Parametri koje svaki handler STVARNO koristi u svom Cypher upitu — oni i
+# čine ključ keša. Namerno se razlikuju po statistici: npr. sastav
+# aminokiselina zavisi samo od proteina i lanca, pa promena tipa rastojanja
+# ne sme da pravi novi unos u kešu.
+#
+# PAŽNJA: nijedan handler trenutno ne koristi max_distance/min_distance
+# (vidi stats_queries.py), zato ih nema ni u ključu. Ako se neki handler
+# izmeni da poštuje te granice, MORA se dodati i ovde — inače će keš vraćati
+# rezultat izračunat za drugi opseg. Statistika koja nije navedena u ovoj
+# mapi se jednostavno ne kešira.
+STAT_CACHE_PARAMS = {
+    "aa_composition":   ("protein", "chain"),
+    "ss_distribution":  ("protein", "chain"),
+    "sequence":         ("protein", "chain"),
+    "ss_pairs":         ("protein", "chain", "type"),
+    "distance_summary": ("protein", "chain", "type"),
+    "outlier_ss":       ("protein", "chain", "type"),
+}
+
+
+def _norm_stat_type(value):
+    """Ista normalizacija kao u stats_queries — prazan tip znači 'caca'."""
+    return value if (value and value != "prazno") else "caca"
+
+
+def _stats_cache_key(name, key_params):
+    raw = "|".join([name] + [str(key_params[p]) for p in STAT_CACHE_PARAMS[name]])
+    return "stats:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _should_cache_stat(result):
+    """Prazan rezultat se ne kešira — da uvoz novog dump-a ne bi ostao
+    zaklonjen zapamćenim 'nema podataka' do isteka TTL-a."""
+    if not isinstance(result, dict) or result.get("empty"):
+        return False
+    if result.get("total") == 0:
+        return False
+
+    lists = [v for v in result.values() if isinstance(v, list)]
+    if lists and all(not v for v in lists):
+        return False
+
+    return True
+
 
 def _safe_filename_part(value, default="all"):
     text = str(value or default).strip()
@@ -186,19 +232,41 @@ def stats(request):
 
     out = {"protein": protein, "chain": chain or None}
 
+    # normalizovano samo za ključ keša — handleri i dalje dobijaju sirove
+    # vrednosti i sami ih normalizuju, pa se ponašanje ne menja
+    key_params = {
+        "protein": protein.strip().upper(),
+        "chain": chain,
+        "type": _norm_stat_type(type_),
+    }
+
     for key in requested:
         fn = STAT_HANDLERS.get(key)
         if not fn:
             out[key] = {"error": "unknown stat"}
             continue
 
-        out[key] = fn(
+        cache_key = _stats_cache_key(key, key_params) if key in STAT_CACHE_PARAMS else None
+
+        if cache_key:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                logger.debug("stats cache hit: %s (%s)", key, cache_key)
+                out[key] = cached
+                continue
+
+        result = fn(
             protein=protein,
             chain=chain,
             type=type_,
             max_distance=max_distance,
             min_distance=min_distance
         )
+
+        if cache_key and _should_cache_stat(result):
+            cache.set(cache_key, result, STATS_CACHE_TTL)
+
+        out[key] = result
 
     return JsonResponse(out)
 
