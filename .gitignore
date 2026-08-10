@@ -25,6 +25,12 @@ media/
 latex_heatmaps/
 latex_segment_histograms/
 
+# Slike pripremljene za Overleaf
+overleaf_images/
+overleaf_images_simple/
+overleaf_images.zip
+overleaf_images_simple.zip
+
 # Environment
 .env
 .env.*
