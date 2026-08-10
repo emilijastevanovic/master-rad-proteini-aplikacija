@@ -56,6 +56,7 @@ dist/
 *.swo
 
 IMPROVEMENTS.txt
+PREZENTACIJA.md
 
 # Local Neo4j dumps for Docker restore
 neo4j/backup/*
