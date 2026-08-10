@@ -73,6 +73,45 @@ def _should_cache_stat(result):
     return True
 
 
+def _clean_distance(value, label):
+    """Validira granicu rastojanja i vraća normalizovan string (ili None).
+
+    Prihvata i zarez kao decimalni znak, jer je na našoj tastaturi prirodno
+    kucnuti „8,5". Vraća string, a ne float, da bi `0` i dalje bilo tretirano
+    kao zadata granica — kao i pre ove provere.
+    """
+    if value is None:
+        return None
+
+    text = str(value).strip().replace(",", ".")
+    if not text or text == "prazno":
+        return None
+
+    try:
+        float(text)
+    except ValueError:
+        raise ValueError(f"{label}: očekivan je broj, uneto „{value}”")
+
+    return text
+
+
+def _clean_k(value):
+    """Validira sekvencijalno rastojanje (ceo broj)."""
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text or text == "prazno":
+        return None
+
+    try:
+        int(text)
+    except ValueError:
+        raise ValueError(f"sekvencijalno rastojanje: očekivan je ceo broj, uneto „{value}”")
+
+    return text
+
+
 def _safe_filename_part(value, default="all"):
     text = str(value or default).strip()
     if not text or text == "prazno":
@@ -128,16 +167,19 @@ def graph3d_protein(request):
         return JsonResponse({"error": "protein parameter is required"}, status=400)
 
     aminoname_raw = request.GET.get("aminoname", "")
-    params = {
-        "protein": protein,
-        "aminonames": [a for a in aminoname_raw.split(",") if a],
-        "ss": request.GET.get("ss", "/"),
-        "k": request.GET.get("k"),
-        "type": request.GET.get("type", "prazno"),
-        "max_distance": request.GET.get("max_distance"),
-        "min_distance": request.GET.get("min_distance"),
-        "chain": request.GET.get("chain"),
-    }
+    try:
+        params = {
+            "protein": protein,
+            "aminonames": [a for a in aminoname_raw.split(",") if a],
+            "ss": request.GET.get("ss", "/"),
+            "k": _clean_k(request.GET.get("k")),
+            "type": request.GET.get("type", "prazno"),
+            "max_distance": _clean_distance(request.GET.get("max_distance"), "gornja granica"),
+            "min_distance": _clean_distance(request.GET.get("min_distance"), "donja granica"),
+            "chain": request.GET.get("chain"),
+        }
+    except ValueError as e:
+        return JsonResponse({"error": "invalid_parameter", "detail": str(e)}, status=400)
 
     nodes = {}
     edges = []
