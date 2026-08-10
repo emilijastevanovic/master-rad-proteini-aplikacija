@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 from django.core.cache import cache
 from django.test import TestCase
 
+from .protein_analysis import make_segment_hist_png
 from .query_builder import build_graph3d_protein
 from .stats_queries import stat_aa_seq
 from .views import STAT_CACHE_PARAMS, STAT_HANDLERS
@@ -76,6 +77,72 @@ class AaSeqTests(TestCase):
         self.assertEqual(result["protein"], "1A17")
         self.assertEqual(run_query.call_args.kwargs["protein"], "1A17")
         self.assertIsNone(run_query.call_args.kwargs["chain"])
+
+
+class DistanceParamValidationTests(TestCase):
+    BASE = {
+        "protein": "1G2Y", "aminoname": "", "chain": "",
+        "ss": "prazno", "k": "", "type": "caca",
+        "max_distance": "", "min_distance": "",
+    }
+
+    def _get(self, **params):
+        query = dict(self.BASE)
+        query.update(params)
+        return self.client.get("/api/graph3d/", query)
+
+    @patch("distances.views.run_query", return_value=[])
+    def test_comma_is_accepted_as_decimal_separator(self, run_query):
+        # na našoj tastaturi je „8,5" prirodnije od „8.5"
+        response = self._get(max_distance="8,5")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(run_query.call_args.kwargs["max_distance"], 8.5)
+
+    @patch("distances.views.run_query", return_value=[])
+    def test_comma_accepted_for_lower_bound(self, run_query):
+        response = self._get(min_distance="4,25")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(run_query.call_args.kwargs["min_distance"], 4.25)
+
+    @patch("distances.views.run_query", return_value=[])
+    def test_invalid_distance_returns_400_not_500(self, run_query):
+        response = self._get(max_distance="abc")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("gornja granica", response.json()["detail"])
+        run_query.assert_not_called()
+
+    @patch("distances.views.run_query", return_value=[])
+    def test_invalid_k_returns_400_not_500(self, run_query):
+        response = self._get(k="8.5")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("sekvencijalno rastojanje", response.json()["detail"])
+        run_query.assert_not_called()
+
+    @patch("distances.views.run_query", return_value=[])
+    def test_blank_bounds_are_not_applied(self, run_query):
+        response = self._get(max_distance="", min_distance="prazno", k="")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("max_distance", run_query.call_args.kwargs)
+        self.assertNotIn("min_distance", run_query.call_args.kwargs)
+        self.assertNotIn("k", run_query.call_args.kwargs)
+
+
+class SegmentHistogramTests(TestCase):
+    def test_integer_bins_when_range_is_narrow(self):
+        # opseg 1-8 ne sme da se deli na 30 pregrada
+        png = make_segment_hist_png([1, 1, 2, 3, 5, 8], protein="TEST")
+
+        self.assertTrue(png.startswith(b"\x89PNG"))
+
+    def test_wide_range_still_renders(self):
+        png = make_segment_hist_png(list(range(1, 200)), protein="TEST")
+
+        self.assertTrue(png.startswith(b"\x89PNG"))
 
 
 class StatsCacheTests(TestCase):
