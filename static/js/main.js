@@ -15,6 +15,7 @@ function hideViewerMessage() {
 
 let HEATMAP_URLS = null;
 let SEGMENTS_URL = null;
+let SEGMENTS_BY_SS_URL = null;
 
 let TOOLTIP_LOCKED = false;
 
@@ -52,6 +53,104 @@ function showSphereTooltip(pixelX, pixelY, html) {
   }
 
   tooltip.style.visibility = "visible";
+}
+
+
+// ---- dinamička lista lanaca ------------------------------------------------
+// Lanci zavise od proteina, pa se padajuća lista puni tek kad korisnik unese
+// protein. Ranije je lista bila fiksna i nudila je lance kojih u proteinu nema.
+
+let CHAINS_ABORT = null;
+let CHAINS_LOADED_FOR = null;
+let CHAINS_DEBOUNCE = null;
+
+function setChainHint(text, cls = "") {
+  const hint = document.getElementById("chainHint");
+  if (!hint) return;
+  hint.textContent = text;
+  hint.className = "chain-hint" + (cls ? " " + cls : "");
+}
+
+function renderChainOptions(chains) {
+  const sel = document.getElementById("chain");
+  if (!sel) return;
+
+  const previous = sel.value;
+
+  sel.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "prazno";
+  all.textContent = "– svi –";
+  sel.appendChild(all);
+
+  for (const c of chains) {
+    const opt = document.createElement("option");
+    opt.value = c.chain;
+    opt.textContent = `${c.chain} (${c.n})`;
+    sel.appendChild(opt);
+  }
+
+  // zadrži prethodni izbor ako taj lanac postoji i u novom proteinu
+  sel.value = chains.some(c => c.chain === previous) ? previous : "prazno";
+}
+
+function resetChains(hint = "", cls = "muted") {
+  CHAINS_LOADED_FOR = null;
+  renderChainOptions([]);
+  setChainHint(hint, cls);
+}
+
+async function loadChainsFor(protein) {
+  const sel = document.getElementById("chain");
+  if (!sel) return;
+
+  if (CHAINS_ABORT) CHAINS_ABORT.abort();
+  CHAINS_ABORT = new AbortController();
+  const { signal } = CHAINS_ABORT;
+
+  setChainHint("…");
+
+  try {
+    const res = await fetch(`/api/chains/?protein=${encodeURIComponent(protein)}`, { signal });
+    const data = await res.json();
+
+    if (!res.ok) {
+      resetChains("greška", "error");
+      return;
+    }
+
+    const chains = data.chains || [];
+    if (!chains.length) {
+      resetChains("nema lanaca", "muted");
+      return;
+    }
+
+    CHAINS_LOADED_FOR = protein;
+    renderChainOptions(chains);
+    setChainHint(`${chains.length}`);
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    resetChains("greška", "error");
+  }
+}
+
+function refreshChains({ immediate = false } = {}) {
+  const protein = document.getElementById("protein")?.value.trim().toUpperCase() || "";
+
+  if (!protein) {
+    if (CHAINS_ABORT) CHAINS_ABORT.abort();
+    resetChains("");
+    return;
+  }
+
+  if (protein === CHAINS_LOADED_FOR) return;
+
+  clearTimeout(CHAINS_DEBOUNCE);
+  if (immediate) {
+    loadChainsFor(protein);
+  } else {
+    CHAINS_DEBOUNCE = setTimeout(() => loadChainsFor(protein), 350);
+  }
 }
 
 
@@ -94,12 +193,17 @@ async function loadGraph3D() {
   }
   hideViewerMessage();
 
+  // ako je korisnik kliknuo „Prikaži" pre nego što je debounce stigao da
+  // osveži listu lanaca, dovuci je odmah (izbor lanca se čuva ako postoji)
+  refreshChains({ immediate: true });
+
   const key = analysisKey(protein, chain, type, maxdist, mindist);
   if (key !== LAST_ANALYSIS_KEY) {
     SEQ_CACHE = null;
     SEQ_RENDERED = false;
     HEATMAP_URLS = null;
     SEGMENTS_URL = null;
+    SEGMENTS_BY_SS_URL = null;
     LAST_ANALYSIS_KEY = key;
 
     // očisti vidljiv sadržaj tabova
@@ -108,6 +212,22 @@ async function loadGraph3D() {
     if (distTable) distTable.style.display = "none";
     const distMeta = document.getElementById("distSummaryMeta");
     if (distMeta) distMeta.textContent = "Klikni \"Prikaži\" da učitaš podatke.";
+    const rangeTable = document.getElementById("rangeSummaryTable");
+    const rangeByType = document.getElementById("rangeByTypeTable");
+    const rangeByTypeTitle = document.getElementById("rangeByTypeTitle");
+    const rangeMeta = document.getElementById("rangeSummaryMeta");
+    const rangeFilters = document.getElementById("rangeSummaryFilters");
+    if (rangeTable)  { rangeTable.style.display  = "none"; rangeTable.querySelector("tbody").innerHTML  = ""; }
+    if (rangeByType) { rangeByType.style.display = "none"; rangeByType.querySelector("tbody").innerHTML = ""; }
+    if (rangeByTypeTitle) rangeByTypeTitle.style.display = "none";
+    if (rangeMeta) rangeMeta.textContent = "Klikni \"Prikaži\" da učitaš podatke.";
+    if (rangeFilters) rangeFilters.textContent = "";
+    const rangeSSPairsTable = document.getElementById("rangeSSPairsTable");
+    const rangeSSPairsMeta = document.getElementById("rangeSSPairsMeta");
+    const rangeSSPairsFilters = document.getElementById("rangeSSPairsFilters");
+    if (rangeSSPairsTable) { rangeSSPairsTable.style.display = "none"; rangeSSPairsTable.querySelector("tbody").innerHTML = ""; }
+    if (rangeSSPairsMeta) rangeSSPairsMeta.textContent = "Klikni \"Prikaži\" da učitaš podatke.";
+    if (rangeSSPairsFilters) rangeSSPairsFilters.textContent = "";
     const ssDistributionMeta = document.getElementById("ssDistributionMeta");
     const ssDistributionTable = document.getElementById("ssDistributionTable");
     if (ssDistributionMeta) ssDistributionMeta.textContent = "Klikni \"Prikaži\" da učitaš podatke.";
@@ -129,6 +249,10 @@ async function loadGraph3D() {
     if (outlierTopMeta) outlierTopMeta.textContent = "";
     if (outlierSSTable)  { outlierSSTable.style.display  = "none"; outlierSSTable.querySelector("tbody").innerHTML  = ""; }
     if (outlierTopTable) { outlierTopTable.style.display = "none"; outlierTopTable.querySelector("tbody").innerHTML = ""; }
+    const closestTopMeta  = document.getElementById("closestTopMeta");
+    const closestTopTable = document.getElementById("closestTopTable");
+    if (closestTopMeta) closestTopMeta.textContent = "";
+    if (closestTopTable) { closestTopTable.style.display = "none"; closestTopTable.querySelector("tbody").innerHTML = ""; }
 
     document.querySelectorAll("img.heatmap-img, img.seg-img, .img-loading").forEach(x => x.remove());
     const heatCard = document.querySelector("#tabDistance .card");
@@ -139,11 +263,14 @@ async function loadGraph3D() {
       p.textContent = "Klikni \"Prikaži\" pa otvori ovaj tab.";
       heatCard.appendChild(p);
     }
-    if (segCard && !segCard.querySelector(".muted")) {
-      const p = document.createElement("div");
-      p.className = "muted";
-      p.textContent = "Klikni \"Prikaži\" pa otvori ovaj tab.";
-      segCard.appendChild(p);
+    if (segCard) {
+      segCard.querySelectorAll(".seg-subtitle, .seg-error").forEach(x => x.remove());
+      if (!segCard.querySelector(".seg-placeholder")) {
+        const p = document.createElement("div");
+        p.className = "muted seg-placeholder";
+        p.textContent = "Klikni \"Prikaži\" pa otvori ovaj tab.";
+        segCard.appendChild(p);
+      }
     }
   }
 
@@ -152,11 +279,12 @@ async function loadGraph3D() {
   loadSSDistribution(protein, chain, type, maxdist, mindist);
   loadSSPairs(protein, chain, type, maxdist, mindist);
   loadDistanceSummary(protein, chain, type, maxdist, mindist);
+  loadRangeSummary(protein, chain, type, maxdist, mindist, ss, sec_dist, aminoname);
   loadOutlierSS(protein, chain, type, maxdist, mindist);
 
   prefetchSeq(protein, chain, type, maxdist, mindist);
 
-  setHeatmapUrls(protein, chain, type, maxdist, mindist);
+  setHeatmapUrls(protein, chain, type, maxdist, mindist, aminoname);
   setSegmentsUrl(protein, chain);
 
   // ako je tab već otvoren, odmah re-renderuj
@@ -492,22 +620,42 @@ function renderSeqIfReady() {
   SEQ_RENDERED = true;
 }
 
-function setHeatmapUrls(protein, chain, type, maxdist, mindist) {
+function setHeatmapUrls(protein, chain, type, maxdist, mindist, aminoname) {
   const p = encodeURIComponent(protein);
   const c = encodeURIComponent(chain);
   const t = encodeURIComponent(type);
 
   const stamp = Date.now(); // cache-bust
 
+  // Druga mapa se crta samo za pravi podskup aminokiselina. Kad su označene
+  // sve (ili nijedna, što znači „bez filtera"), bila bi ista kao prva.
+  const selected = (aminoname || "").split(",").filter(Boolean);
+  const total = document.querySelectorAll(".aa-chip").length;
+  const isSubset = selected.length > 0 && selected.length < total;
+
+  // Treća mapa je agregirana po vrsti aminokiseline (GLU × LYS × THR), pa ima
+  // smisla tek od dve označene naviše — za jednu vrstu bila bi jedan broj.
+  const aaSelekcija = encodeURIComponent(selected.join(","));
+
   HEATMAP_URLS = {
     distance: `/api/heatmap/distance/?protein=${p}&chain=${c}&type=${t}&_=${stamp}`,
-    meta: { protein, chain, type }
+    subset: isSubset
+      ? `/api/heatmap/distance/?protein=${p}&chain=${c}&type=${t}` +
+        `&aminoname=${aaSelekcija}&_=${stamp}`
+      : null,
+    aaTypes: selected.length >= 2
+      ? `/api/heatmap/aa_types/?protein=${p}&chain=${c}&type=${t}` +
+        `&aminoname=${aaSelekcija}&_=${stamp}`
+      : null,
+    meta: { protein, chain, type, aminonames: selected, isSubset }
   };
 }
 
 function setSegmentsUrl(protein, chain) {
   const stamp = Date.now();
-  SEGMENTS_URL = `/api/heatmap/segments/?protein=${encodeURIComponent(protein)}&chain=${encodeURIComponent(chain)}&_=${stamp}`;
+  const q = `protein=${encodeURIComponent(protein)}&chain=${encodeURIComponent(chain)}&_=${stamp}`;
+  SEGMENTS_URL = `/api/heatmap/segments/?${q}`;
+  SEGMENTS_BY_SS_URL = `/api/heatmap/segments_by_ss/?${q}`;
 }
 
 function renderSegmentsImg() {
@@ -517,37 +665,62 @@ function renderSegmentsImg() {
   if (!card) return;
 
   if (!SEGMENTS_URL) {
-    const muted = card.querySelector(".muted");
-    if (muted) muted.textContent = "Klikni \"Prikaži\" da učitaš histogram.";
+    const placeholder = card.querySelector(".seg-placeholder");
+    if (placeholder) placeholder.textContent = "Klikni \"Prikaži\" da učitaš histogram.";
     return;
   }
 
-  const muted = card.querySelector(".muted");
-  if (muted) muted.remove();
+  // briše se samo poruka „Klikni Prikaži" i greške iz prethodnog pokušaja —
+  // objašnjenje šta je segment ostaje u kartici
+  card.querySelectorAll(".seg-placeholder, .seg-error").forEach(x => x.remove());
   card.querySelectorAll("img.seg-img").forEach(x => x.remove());
+  card.querySelectorAll(".seg-subtitle").forEach(x => x.remove());
 
-  const loadingSeg = document.createElement("div");
-  loadingSeg.className = "img-loading";
-  loadingSeg.textContent = "Učitavanje...";
-  card.appendChild(loadingSeg);
+  const addImg = (url, alt, errText) => {
+    const loading = document.createElement("div");
+    loading.className = "img-loading";
+    loading.textContent = "Učitavanje...";
+    card.appendChild(loading);
 
-  const img = document.createElement("img");
-  img.className = "seg-img zoomable";
-  img.src = SEGMENTS_URL;
-  img.alt = "Histogram dužina segmenata";
-  img.style.width = "100%";
-  img.style.borderRadius = "10px";
-  img.style.marginTop = "10px";
-  img.onload  = () => loadingSeg.remove();
-  img.onerror = () => {
-    loadingSeg.remove();
-    img.remove();
-    const err = document.createElement("div");
-    err.className = "muted";
-    err.textContent = "Nema podataka za segmente (klikni Prikaži).";
-    card.appendChild(err);
+    const img = document.createElement("img");
+    img.className = "seg-img zoomable";
+    img.src = url;
+    img.alt = alt;
+    img.style.width = "100%";
+    img.style.borderRadius = "10px";
+    img.style.marginTop = "10px";
+    img.onload  = () => loading.remove();
+    img.onerror = () => {
+      loading.remove();
+      img.remove();
+      const err = document.createElement("div");
+      err.className = "muted seg-error";
+      err.textContent = errText;
+      card.appendChild(err);
+    };
+    card.appendChild(img);
   };
-  card.appendChild(img);
+
+  const sub1 = document.createElement("div");
+  sub1.className = "heatmap-subtitle seg-subtitle";
+  sub1.textContent = "Svi SS tipovi";
+  card.appendChild(sub1);
+
+  addImg(SEGMENTS_URL, "Histogram dužina segmenata", "Nema podataka za segmente (klikni Prikaži).");
+
+  if (!SEGMENTS_BY_SS_URL) return;
+
+  const sub2 = document.createElement("div");
+  sub2.className = "heatmap-subtitle seg-subtitle";
+  sub2.style.marginTop = "18px";
+  sub2.textContent = "Po SS tipu";
+  card.appendChild(sub2);
+
+  addImg(
+    SEGMENTS_BY_SS_URL,
+    "Histogrami dužina segmenata po SS tipu",
+    "Nema podataka o sekundarnoj strukturi za ovaj protein/lanac."
+  );
 }
 
 function renderHeatmapsFromUrls() {
@@ -571,7 +744,9 @@ function renderHeatmapsFromUrls() {
   card.querySelectorAll("img.heatmap-img").forEach(x => x.remove());
   card.querySelectorAll(".heatmap-subtitle").forEach(x => x.remove());
 
-  const { distance, meta } = HEATMAP_URLS;
+  card.querySelectorAll(".heatmap-err").forEach(x => x.remove());
+
+  const { distance, subset, aaTypes, meta } = HEATMAP_URLS;
 
   const typeLabels = {
     caca: "Cα–Cα rastojanje",
@@ -580,34 +755,68 @@ function renderHeatmapsFromUrls() {
     prazno: "Cα–Cα rastojanje",
   };
   const typeLabel = typeLabels[meta?.type] || meta?.type || "Cα–Cα rastojanje";
+  const aaList = (meta?.aminonames || []).join(", ");
 
-  const subtitle = document.createElement("div");
-  subtitle.className = "heatmap-subtitle";
-  subtitle.textContent = typeLabel;
-  card.appendChild(subtitle);
+  // tri mape se razlikuju samo po izvoru, naslovu i poruci o grešci
+  const dodajMapu = ({ src, naslov, alt, greska, prva }) => {
+    const subtitle = document.createElement("div");
+    subtitle.className = "heatmap-subtitle";
+    if (!prva) subtitle.style.marginTop = "18px";
+    subtitle.textContent = naslov;
+    card.appendChild(subtitle);
 
-  const loading1 = document.createElement("div");
-  loading1.className = "img-loading";
-  loading1.textContent = "Učitavanje...";
-  card.appendChild(loading1);
+    const loading = document.createElement("div");
+    loading.className = "img-loading";
+    loading.textContent = "Učitavanje...";
+    card.appendChild(loading);
 
-  const img1 = document.createElement("img");
-  img1.className = "heatmap-img zoomable";
-  img1.src = distance;
-  img1.alt = `Toplotna mapa — ${typeLabel}`;
-  img1.style.width = "100%";
-  img1.style.borderRadius = "10px";
-  img1.style.marginTop = "10px";
-  img1.onload  = () => loading1.remove();
-  img1.onerror = () => {
-    loading1.remove();
-    img1.remove();
-    const err = document.createElement("div");
-    err.className = "muted";
-    err.textContent = "Nema podataka za toplotnu mapu (izaberi tip rastojanja i klikni Prikaži).";
-    card.appendChild(err);
+    const img = document.createElement("img");
+    img.className = "heatmap-img zoomable";
+    img.src = src;
+    img.alt = alt;
+    img.style.width = "100%";
+    img.style.borderRadius = "10px";
+    img.style.marginTop = "10px";
+    img.onload  = () => loading.remove();
+    img.onerror = () => {
+      loading.remove();
+      img.remove();
+      const err = document.createElement("div");
+      err.className = "muted heatmap-err";
+      err.textContent = greska;
+      card.appendChild(err);
+    };
+    card.appendChild(img);
   };
-  card.appendChild(img1);
+
+  dodajMapu({
+    src: distance,
+    naslov: typeLabel,
+    alt: `Toplotna mapa — ${typeLabel}`,
+    greska: "Nema podataka za toplotnu mapu (izaberi tip rastojanja i klikni Prikaži).",
+    prva: true,
+  });
+
+  // druga mapa: samo označene aminokiseline, svaki reziduum sa svakim
+  if (subset) {
+    dodajMapu({
+      src: subset,
+      naslov: `${typeLabel}: selektovane ${aaList}`,
+      alt: `Toplotna mapa — ${aaList}`,
+      greska: `Nema rastojanja između selektovanih aminokiselina (${aaList}).`,
+    });
+  }
+
+  // treća mapa: prosek po vrsti aminokiseline — matrica je onolika koliko je
+  // označenih vrsta (GLU, LYS, THR → 3×3), a ne koliko protein ima reziduua
+  if (aaTypes) {
+    dodajMapu({
+      src: aaTypes,
+      naslov: `${typeLabel}: prosek po vrsti aminokiseline (${aaList})`,
+      alt: `Prosečno rastojanje po vrsti aminokiseline — ${aaList}`,
+      greska: `Nema parova za prosek po vrsti (${aaList}).`,
+    });
+  }
 }
 
 
@@ -710,6 +919,223 @@ async function loadDistanceSummary(protein, chain, type, maxdist, mindist) {
   }
 }
 
+const DIST_TYPE_LABELS = {
+  caca: "Cα–Cα",
+  minbezh: "Min. bez H",
+  maxbezh: "Maks. bez H",
+};
+
+// Jedan opisni red iznad tabela: koji tip rastojanja i koji opseg je izabran.
+// Lanac, k, SS i izbor aminokiselina se dopisuju samo ako su zaista zadati,
+// da natpis ostane u jednom redu.
+function describeRangeFilters(f) {
+  if (!f) return "";
+
+  const type = f.type ? (DIST_TYPE_LABELS[f.type] || f.type) : "Sva";
+
+  let range;
+  if (f.min_distance != null && f.max_distance != null) {
+    range = `u opsegu ${f.min_distance}–${f.max_distance} Å`;
+  } else if (f.max_distance != null) {
+    range = `do ${f.max_distance} Å`;
+  } else if (f.min_distance != null) {
+    range = `od ${f.min_distance} Å`;
+  } else {
+    range = "bez zadatih granica";
+  }
+
+  const extra = [];
+  if (f.chain) extra.push(`lanac ${f.chain}`);
+  if (f.k != null) extra.push(`k ≥ ${f.k}`);
+  if (f.ss) extra.push(`SS ${f.ss}`);
+  if (f.aminonames && f.aminonames.length && f.aminonames.length < 20) {
+    extra.push(`${f.aminonames.length} od 20 AA`);
+  }
+
+  return `${type} rastojanja ${range}` + (extra.length ? ` (${extra.join(", ")})` : "") + ".";
+}
+
+// Tabela SS parova u izabranom opsegu — puni se iz istog odgovora kao i
+// pregled opsega (jedan zahtev), samo se prikazuje u tabu „SS parovi".
+function renderRangeSSPairs(s) {
+  const meta      = document.getElementById("rangeSSPairsMeta");
+  const filtersEl = document.getElementById("rangeSSPairsFilters");
+  const table     = document.getElementById("rangeSSPairsTable");
+  const tbody     = table?.querySelector("tbody");
+
+  if (!meta || !table || !tbody) return;
+
+  tbody.innerHTML = "";
+  table.style.display = "none";
+
+  if (!s) {
+    meta.textContent = "Nema podataka.";
+    if (filtersEl) filtersEl.textContent = "";
+    return;
+  }
+
+  if (filtersEl) filtersEl.textContent = describeRangeFilters(s.filters);
+
+  const rows = s.by_ss_pair || [];
+  if (!rows.length) {
+    meta.textContent = "Nema parova sa poznatom sekundarnom strukturom u izabranom opsegu.";
+    return;
+  }
+
+  const fmt3 = v => (v == null ? "–" : Number(v).toFixed(3));
+
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${r.ss_pair}</td>` +
+      `<td class="num">${Number(r.count).toLocaleString("sr-RS")}</td>` +
+      `<td class="num">${r.pct == null ? "–" : Number(r.pct).toFixed(1)}</td>` +
+      `<td class="num">${fmt3(r.mean)}</td>` +
+      `<td class="num">${fmt3(r.median)}</td>` +
+      `<td class="num">${fmt3(r.min)}</td>` +
+      `<td class="num">${fmt3(r.max)}</td>` +
+      `<td class="num">${fmt3(r.std)}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  // Filter po SS traži da OBE aminokiseline budu iste strukture, pa tabela
+  // tada ima samo jedan red — bez ove napomene deluje kao da nešto nedostaje.
+  meta.textContent = s.filters?.ss
+    ? `Izabran je filter SS „${s.filters.ss}", pa ulaze samo parovi kod kojih obe aminokiseline imaju tu strukturu.`
+    : "";
+
+  table.style.display = "";
+}
+
+async function loadRangeSummary(protein, chain, type, maxdist, mindist, ss, k, aminoname) {
+  const meta       = document.getElementById("rangeSummaryMeta");
+  const filtersEl  = document.getElementById("rangeSummaryFilters");
+  const table      = document.getElementById("rangeSummaryTable");
+  const tbody      = table?.querySelector("tbody");
+  const typeTitle  = document.getElementById("rangeByTypeTitle");
+  const typeTable  = document.getElementById("rangeByTypeTable");
+  const typeTbody  = typeTable?.querySelector("tbody");
+  const ssPairsMeta = document.getElementById("rangeSSPairsMeta");
+
+  if (!meta || !table || !tbody || !typeTable || !typeTbody) return;
+
+  meta.textContent = "Učitavanje...";
+  if (filtersEl) filtersEl.textContent = "";
+  if (ssPairsMeta) ssPairsMeta.textContent = "Učitavanje...";
+  table.style.display = "none";
+  tbody.innerHTML = "";
+  typeTable.style.display = "none";
+  if (typeTitle) typeTitle.style.display = "none";
+  typeTbody.innerHTML = "";
+
+  try {
+    const url =
+      `/api/stats/?protein=${encodeURIComponent(protein)}` +
+      `&chain=${encodeURIComponent(chain)}` +
+      `&type=${encodeURIComponent(type)}` +
+      `&max_distance=${encodeURIComponent(maxdist)}` +
+      `&min_distance=${encodeURIComponent(mindist)}` +
+      `&ss=${encodeURIComponent(ss || "")}` +
+      `&k=${encodeURIComponent(k || "")}` +
+      `&aminoname=${encodeURIComponent(aminoname || "")}` +
+      `&include=range_summary`;
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      const msg = detail?.detail || `Greška pri učitavanju (HTTP ${res.status}).`;
+      meta.textContent = msg;
+      if (ssPairsMeta) ssPairsMeta.textContent = msg;
+      return;
+    }
+
+    const s = (await res.json()).range_summary;
+    renderRangeSSPairs(s);
+
+    if (!s) {
+      meta.textContent = "Nema podataka.";
+      return;
+    }
+
+    if (filtersEl) filtersEl.textContent = describeRangeFilters(s.filters);
+
+    if (s.empty) {
+      meta.textContent = s.total_base
+        ? `Nijedan od ${s.total_base.toLocaleString("sr-RS")} parova ne upada u izabrani opseg.`
+        : "Nema parova za izabrane filtere.";
+      return;
+    }
+
+    const fmtA = v => (v == null ? "–" : Number(v).toFixed(3) + " Å");
+    const fmtN = v => (v == null ? "–" : Number(v).toLocaleString("sr-RS"));
+
+    const sections = [
+      {
+        header: "Broj parova",
+        rows: [
+          ["U izabranom opsegu", fmtN(s.count)],
+          ["Bez granica", fmtN(s.total_base)],
+          ["Udeo", s.pct_of_base == null ? "–" : Number(s.pct_of_base).toFixed(1) + " %"],
+        ],
+      },
+      {
+        header: "Centralna tendencija",
+        rows: [
+          ["Prosek", fmtA(s.mean)],
+          ["Medijana", fmtA(s.median)],
+          ["Std. devijacija", fmtA(s.std)],
+        ],
+      },
+      {
+        header: "Opseg vrednosti",
+        rows: [
+          ["Minimum", fmtA(s.min)],
+          ["p25", fmtA(s.p25)],
+          ["p75", fmtA(s.p75)],
+          ["Maksimum", fmtA(s.max)],
+        ],
+      },
+    ];
+
+    for (const section of sections) {
+      const th = document.createElement("tr");
+      th.innerHTML = `<td colspan="2" class="stat-section-header">${section.header}</td>`;
+      tbody.appendChild(th);
+      for (const [label, value] of section.rows) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${label}</td><td class="num">${value}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    meta.textContent = "";
+    table.style.display = "";
+
+    const byType = s.by_type || [];
+    if (byType.length) {
+      for (const r of byType) {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          `<td>${DIST_TYPE_LABELS[r.type] || r.type}</td>` +
+          `<td class="num">${fmtN(r.count)}</td>` +
+          `<td class="num">${r.mean == null ? "–" : Number(r.mean).toFixed(3)}</td>` +
+          `<td class="num">${r.median == null ? "–" : Number(r.median).toFixed(3)}</td>` +
+          `<td class="num">${r.min == null ? "–" : Number(r.min).toFixed(3)}</td>` +
+          `<td class="num">${r.max == null ? "–" : Number(r.max).toFixed(3)}</td>` +
+          `<td class="num">${r.std == null ? "–" : Number(r.std).toFixed(3)}</td>`;
+        typeTbody.appendChild(tr);
+      }
+      typeTable.style.display = "";
+      if (typeTitle) typeTitle.style.display = "";
+    }
+
+  } catch (err) {
+    console.error("loadRangeSummary failed", err);
+    meta.textContent = "Greška pri učitavanju (proveri konzolu).";
+    if (ssPairsMeta) ssPairsMeta.textContent = "Greška pri učitavanju (proveri konzolu).";
+  }
+}
+
 async function loadSSPairs(protein, chain, type, maxdist, mindist) {
   const meta  = document.getElementById("ssPairsMeta");
   const table = document.getElementById("ssPairsTable");
@@ -771,6 +1197,9 @@ async function loadOutlierSS(protein, chain, type, maxdist, mindist) {
   const topMeta  = document.getElementById("outlierTopMeta");
   const topTable = document.getElementById("outlierTopTable");
   const topTbody = topTable?.querySelector("tbody");
+  const closeMeta  = document.getElementById("closestTopMeta");
+  const closeTable = document.getElementById("closestTopTable");
+  const closeTbody = closeTable?.querySelector("tbody");
 
   if (!ssMeta || !ssTable || !ssTbody || !topMeta || !topTable || !topTbody) return;
 
@@ -780,6 +1209,9 @@ async function loadOutlierSS(protein, chain, type, maxdist, mindist) {
   topTable.style.display = "none";
   ssTbody.innerHTML  = "";
   topTbody.innerHTML = "";
+  if (closeMeta)  closeMeta.textContent = "";
+  if (closeTable) closeTable.style.display = "none";
+  if (closeTbody) closeTbody.innerHTML = "";
 
   try {
     const url =
@@ -796,8 +1228,17 @@ async function loadOutlierSS(protein, chain, type, maxdist, mindist) {
 
     const ssStats     = block?.ss_stats     || [];
     const topResidues = block?.top_residues || [];
+    const closestResidues = block?.closest_residues || [];
 
     const fmt = v => (v == null ? "–" : Number(v).toFixed(3));
+
+    const residueRow = r => `
+      <td>${r.aa ?? "–"}</td>
+      <td class="num">${r.index ?? "–"}</td>
+      <td>${r.chain ?? "–"}</td>
+      <td>${r.ss ?? "–"}</td>
+      <td class="num">${fmt(r.avg_dist)}</td>
+    `;
 
     if (!ssStats.length) {
       ssMeta.textContent = "Nema podataka za izabrani protein/lanac/tip.";
@@ -818,19 +1259,26 @@ async function loadOutlierSS(protein, chain, type, maxdist, mindist) {
       ssTable.style.display = "";
     }
 
+    if (closestResidues.length && closeTbody && closeTable && closeMeta) {
+      for (const r of closestResidues) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = residueRow(r);
+        closeTbody.appendChild(tr);
+      }
+      // meta se popunjava samo kad protein ima manje od 15 aminokiselina,
+      // da ispod podnaslova ne stoji red teksta koji ništa novo ne kaže
+      closeMeta.textContent = closestResidues.length < 15
+        ? `Protein ima svega ${closestResidues.length} aminokiselina.` : "";
+      closeTable.style.display = "";
+    }
+
     if (topResidues.length) {
       for (const r of topResidues) {
         const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${r.aa ?? "–"}</td>
-          <td class="num">${r.index ?? "–"}</td>
-          <td>${r.chain ?? "–"}</td>
-          <td>${r.ss ?? "–"}</td>
-          <td class="num">${fmt(r.avg_dist)}</td>
-        `;
+        tr.innerHTML = residueRow(r);
         topTbody.appendChild(tr);
       }
-      topMeta.textContent = `Prikazano top ${topResidues.length} najizolovanijih.`;
+      topMeta.textContent = "";
       topTable.style.display = "";
     }
 
@@ -1208,6 +1656,7 @@ function renderSsLegend() {
   }
 }
 
+
 const AA_HYDROPHOBIC = new Set(["ALA","VAL","ILE","LEU","MET","PHE","TRP","PRO","GLY"]);
 const AA_POLAR       = new Set(["SER","THR","CYS","TYR","ASN","GLN"]);
 const AA_POSITIVE    = new Set(["LYS","ARG","HIS"]);
@@ -1219,6 +1668,28 @@ function aaToClass(aa) {
   if (AA_POSITIVE.has(aa))    return "aa-positive";
   if (AA_NEGATIVE.has(aa))    return "aa-negative";
   return "aa-special";
+}
+
+// Samo značenje boja — koje su aminokiseline u kojoj grupi vidi se iz
+// obojenog niza iznad legende.
+const AA_LEGEND = [
+  ["k-nepolarne", "nepolarne (hidrofobne)"],
+  ["k-polarne",   "polarne"],
+  ["k-bazne",     "bazne (pozitivne)"],
+  ["k-kisele",    "kisele (negativne)"],
+  ["k-ostalo",    "ostalo"],
+];
+
+function renderAaLegend() {
+  const box = document.getElementById("aaLegend");
+  if (!box || box.childElementCount) return;
+
+  for (const [swatch, label] of AA_LEGEND) {
+    const item = document.createElement("div");
+    item.className = "aa-legend-item";
+    item.innerHTML = `<span class="aa-legend-key ${swatch}"></span><span>${label}</span>`;
+    box.appendChild(item);
+  }
 }
 
 function setupTabs() {
@@ -1255,6 +1726,118 @@ function setupTabs() {
   });
 }
 
+// =========================
+//   ŠIRINA PANELA SA STATISTIKAMA
+// =========================
+const STATS_WIDTH_KEY = "statsPanelWidth";
+const STATS_WIDTH_DEFAULT = 380;
+const STATS_WIDTH_MIN = 300;
+const GRAPH_WIDTH_MIN = 260;   // koliko najmanje ostaje 3D prikazu
+
+// 3Dmol platno ne prati promenu širine samo od sebe.
+function resizeViewer() {
+  const viewer = GRAPH_DATA && GRAPH_DATA.viewer;
+  if (!viewer || typeof viewer.resize !== "function") return;
+  requestAnimationFrame(() => {
+    viewer.resize();
+    viewer.render();
+  });
+}
+
+function setStatsWidth(layout, px) {
+  const maxW = Math.max(STATS_WIDTH_MIN, layout.clientWidth - GRAPH_WIDTH_MIN);
+  const w = Math.round(Math.min(maxW, Math.max(STATS_WIDTH_MIN, px)));
+  layout.style.setProperty("--stats-w", w + "px");
+  return w;
+}
+
+function setupStatsResize() {
+  const layout   = document.querySelector(".layout");
+  const splitter = document.getElementById("statsSplitter");
+  const fullBtn  = document.getElementById("statsFullBtn");
+  if (!layout) return;
+
+  // zapamćena širina iz prethodne sesije
+  const saved = parseInt(localStorage.getItem(STATS_WIDTH_KEY) || "", 10);
+  if (Number.isFinite(saved)) setStatsWidth(layout, saved);
+
+  if (splitter) {
+    splitter.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      splitter.setPointerCapture(e.pointerId);
+      document.body.classList.add("is-resizing-stats");
+
+      const onMove = (ev) => {
+        // panel je desno: širina = desna ivica layout-a − pozicija kursora
+        const rect = layout.getBoundingClientRect();
+        setStatsWidth(layout, rect.right - ev.clientX);
+      };
+
+      const onUp = () => {
+        splitter.removeEventListener("pointermove", onMove);
+        splitter.removeEventListener("pointerup", onUp);
+        splitter.removeEventListener("pointercancel", onUp);
+        document.body.classList.remove("is-resizing-stats");
+        const cur = layout.style.getPropertyValue("--stats-w");
+        if (cur) localStorage.setItem(STATS_WIDTH_KEY, parseInt(cur, 10));
+        resizeViewer();
+      };
+
+      splitter.addEventListener("pointermove", onMove);
+      splitter.addEventListener("pointerup", onUp);
+      splitter.addEventListener("pointercancel", onUp);
+    });
+
+    // dupli klik = povratak na podrazumevanu širinu
+    splitter.addEventListener("dblclick", () => {
+      setStatsWidth(layout, STATS_WIDTH_DEFAULT);
+      localStorage.removeItem(STATS_WIDTH_KEY);
+      resizeViewer();
+    });
+  }
+
+  const graphFullBtn = document.getElementById("graphFullBtn");
+
+  // "Cela širina" za panel i za graf — isključuju jedno drugo.
+  function applyFullMode(mode) {   // mode: "stats" | "graph" | null
+    layout.classList.toggle("stats-full", mode === "stats");
+    layout.classList.toggle("graph-full", mode === "graph");
+
+    if (fullBtn) {
+      fullBtn.textContent = mode === "stats" ? "⤡ Vrati prikaz" : "⤢ Cela širina";
+      fullBtn.title = mode === "stats"
+        ? "Vrati 3D prikaz i uobičajenu širinu panela"
+        : "Panel preko cele širine — pogodno za screenshot tabela";
+    }
+    if (graphFullBtn) {
+      graphFullBtn.textContent = mode === "graph" ? "⤡ Vrati panel" : "⤢ Cela širina";
+      graphFullBtn.title = mode === "graph"
+        ? "Vrati panel sa statistikama"
+        : "Graf preko cele širine — pogodno za screenshot 3D prikaza";
+    }
+
+    resizeViewer();
+  }
+
+  if (fullBtn) {
+    fullBtn.addEventListener("click", () => {
+      applyFullMode(layout.classList.contains("stats-full") ? null : "stats");
+    });
+  }
+
+  if (graphFullBtn) {
+    graphFullBtn.addEventListener("click", () => {
+      applyFullMode(layout.classList.contains("graph-full") ? null : "graph");
+    });
+  }
+
+  // kod sužavanja prozora ne dozvoli da panel proguta ceo prostor
+  window.addEventListener("resize", () => {
+    const cur = parseInt(layout.style.getPropertyValue("--stats-w"), 10);
+    if (Number.isFinite(cur)) setStatsWidth(layout, cur);
+  });
+}
+
 function hideNodeTooltip() {
   const tooltip = document.getElementById("nodeTooltip");
   if (tooltip) tooltip.style.visibility = "hidden";
@@ -1264,7 +1847,9 @@ function hideNodeTooltip() {
 document.addEventListener("DOMContentLoaded", () => {
   // 1) inicijalizuj tabove (ovo ti je falilo)
   setupTabs();
+  setupStatsResize();
   renderSsLegend();
+  renderAaLegend();
 
   // 2) tooltip hide logika
   const tooltip = document.getElementById("nodeTooltip");
@@ -1310,6 +1895,14 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll('.aa-chip').forEach(chip => {
     chip.addEventListener('click', () => chip.classList.toggle('active'));
   });
+
+  // lanci se učitavaju čim se unese protein
+  const proteinInput = document.getElementById("protein");
+  if (proteinInput) {
+    proteinInput.addEventListener("input", () => refreshChains());
+    proteinInput.addEventListener("change", () => refreshChains({ immediate: true }));
+    refreshChains({ immediate: true });   // ako je polje već popunjeno (npr. posle reload-a)
+  }
 
   // lightbox
   const lightbox    = document.getElementById("lightbox");

@@ -90,12 +90,9 @@
       <div class="filter-sep"></div>
 
       <div class="filter-group">
-        <span class="filter-label">Lanac</span>
+        <span class="filter-label">Lanac <span class="chain-hint" id="chainHint"></span></span>
         <select id="chain">
-          <option value="prazno">–</option>
-          <option>A</option><option>B</option><option>C</option><option>D</option>
-          <option>X</option><option>P</option><option>N</option><option>F</option>
-          <option>I</option><option>G</option><option>R</option>
+          <option value="prazno">– svi –</option>
         </select>
       </div>
 
@@ -107,14 +104,23 @@
     <div id="graphPanel">
       <div id="viewer3d-wrapper">
         <div class="viewer-protein-label" id="viewerLabel"></div>
+        <button type="button" id="graphFullBtn" class="viewer-full-btn"
+                title="Graf preko cele širine — pogodno za screenshot 3D prikaza">⤢ Cela širina</button>
         <div id="viewer3d"></div>
         <div id="loader3d">Učitavanje…</div>
         <div id="viewer-message"></div>
       </div>
     </div>
 
+    <!-- Prevlačenjem se panel sa statistikama širi/sužava; dupli klik vraća podrazumevanu širinu. -->
+    <div id="statsSplitter" title="Prevuci da promeniš širinu panela (dupli klik = podrazumevana širina)"></div>
+
     <div id="statsPanel">
-      <div class="panel-title">Statistike</div>
+      <div class="panel-head">
+        <div class="panel-title">Statistike</div>
+        <button type="button" id="statsFullBtn" class="panel-width-btn"
+                title="Panel preko cele širine — pogodno za screenshot tabela">⤢ Cela širina</button>
+      </div>
 
       <div id="globalStatsCard" class="global-stats-card">
         <div class="global-stats-title">Statistike baze</div>
@@ -145,7 +151,7 @@
         <button class="tab-btn" type="button" data-tab="tabDistance">Rastojanja</button>
         <button class="tab-btn" type="button" data-tab="tabSSPairs">SS parovi</button>
         <button class="tab-btn" type="button" data-tab="tabSegments">Segmenti</button>
-        <button class="tab-btn" type="button" data-tab="tabOutliers">Odstupanja</button>
+        <button class="tab-btn" type="button" data-tab="tabOutliers">Ekstremi</button>
       </div>
 
       <div class="tab-content" id="tabOverview">
@@ -179,8 +185,34 @@
 
         <div class="card">
           <h3>Pregled rastojanja</h3>
+          <div class="muted">Ceo protein: granice, k i SS se ne primenjuju.</div>
           <div class="muted" id="distSummaryMeta">Klikni "Prikaži" da učitaš podatke.</div>
           <table id="distSummaryTable" style="margin-top:10px; display:none;">
+            <tbody></tbody>
+          </table>
+
+          <h3 style="margin-top:18px;">Statistika izabranog opsega</h3>
+          <div class="muted" id="rangeSummaryFilters"></div>
+          <div class="muted" id="rangeSummaryMeta">Klikni "Prikaži" da učitaš podatke.</div>
+          <table id="rangeSummaryTable" style="margin-top:10px; display:none;">
+            <tbody></tbody>
+          </table>
+
+          <div class="heatmap-subtitle" id="rangeByTypeTitle" style="display:none; margin-top:14px;">
+            Po tipu rastojanja
+          </div>
+          <table id="rangeByTypeTable" style="display:none;">
+            <thead>
+              <tr>
+                <th>Tip</th>
+                <th class="num">Broj</th>
+                <th class="num">Prosek (Å)</th>
+                <th class="num">Medijana (Å)</th>
+                <th class="num">Min (Å)</th>
+                <th class="num">Maks. (Å)</th>
+                <th class="num">Std</th>
+              </tr>
+            </thead>
             <tbody></tbody>
           </table>
         </div>
@@ -216,6 +248,7 @@
         <div class="card">
           <h3>Primarna sekvenca</h3>
           <div class="seqTokens" id="aaSequenceTokens">Klikni "Prikaži"...</div>
+          <div class="aa-legend" id="aaLegend"></div>
         </div>
 
         <div class="card">
@@ -235,6 +268,7 @@
       <div class="tab-content" id="tabSSPairs" style="display:none;">
         <div class="card">
           <h3>Statistike SS parova</h3>
+          <div class="muted">Ceo protein: granice, k i SS se ne primenjuju.</div>
           <div class="muted" id="ssPairsMeta">Klikni "Prikaži" da učitaš podatke.</div>
           <table id="ssPairsTable" style="margin-top:10px; display:none;">
             <thead>
@@ -250,13 +284,32 @@
             </thead>
             <tbody></tbody>
           </table>
+
+          <h3 style="margin-top:18px;">SS parovi u izabranom opsegu</h3>
+          <div class="muted" id="rangeSSPairsFilters"></div>
+          <div class="muted" id="rangeSSPairsMeta">Klikni "Prikaži" da učitaš podatke.</div>
+          <table id="rangeSSPairsTable" style="margin-top:10px; display:none;">
+            <thead>
+              <tr>
+                <th>SS par</th>
+                <th class="num">Broj</th>
+                <th class="num">%</th>
+                <th class="num">Prosek (Å)</th>
+                <th class="num">Medijana (Å)</th>
+                <th class="num">Min (Å)</th>
+                <th class="num">Maks. (Å)</th>
+                <th class="num">Std</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
 
       <div class="tab-content" id="tabSegments" style="display:none;">
         <div class="card">
           <h3>Dužine segmenata</h3>
-          <div class="muted">Klikni "Prikaži" pa otvori ovaj tab.</div>
+          <div class="muted seg-placeholder">Klikni "Prikaži" pa otvori ovaj tab.</div>
         </div>
       </div>
 
@@ -280,7 +333,24 @@
         </div>
 
         <div class="card">
-          <h3>Top 15 najizolovanijih rezidua</h3>
+          <h3>Najmanji prosek rastojanja</h3>
+          <div class="muted">Računato do svih ostalih aminokiselina.</div>
+          <div class="muted" id="closestTopMeta"></div>
+          <table id="closestTopTable" style="margin-top:10px; display:none;">
+            <thead>
+              <tr>
+                <th>AA</th>
+                <th class="num">Indeks</th>
+                <th>Lanac</th>
+                <th>SS</th>
+                <th class="num">Prosečno rastojanje (Å)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+
+          <h3 style="margin-top:18px;">Najveći prosek rastojanja</h3>
+          <div class="muted">Računato do svih ostalih aminokiselina.</div>
           <div class="muted" id="outlierTopMeta"></div>
           <table id="outlierTopTable" style="margin-top:10px; display:none;">
             <thead>
@@ -303,7 +373,18 @@
   <div id="nodeTooltip"></div>
   <div id="lightbox"><img id="lightboxImg" src="" alt=""></div>
 
-  <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+  <!-- Lokalna kopija, da 3D prikaz radi i bez interneta. -->
+  <script src="{% static 'js/3Dmol-min.js' %}"></script>
+  <script>
+    // Sigurnosna mreža: ako lokalna kopija iz nekog razloga ne prođe,
+    // povuci istu biblioteku sa CDN-a (tada je internet neophodan).
+    if (typeof $3Dmol === "undefined") {
+      console.warn("Lokalni 3Dmol nije učitan — pokušavam sa CDN-a.");
+      var s3d = document.createElement("script");
+      s3d.src = "https://3Dmol.org/build/3Dmol-min.js";
+      document.head.appendChild(s3d);
+    }
+  </script>
 
   <script src="{% static 'js/main.js' %}"></script>
 

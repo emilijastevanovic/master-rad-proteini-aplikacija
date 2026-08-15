@@ -3,7 +3,9 @@ from unittest.mock import Mock, patch
 from django.core.cache import cache
 from django.test import TestCase
 
-from .protein_analysis import make_segment_hist_png
+import pandas as pd
+
+from .protein_analysis import make_segment_hist_png, make_aa_type_matrix, make_aa_type_heatmap_png
 from .query_builder import build_graph3d_protein
 from .stats_queries import stat_aa_seq
 from .views import STAT_CACHE_PARAMS, STAT_HANDLERS
@@ -143,6 +145,64 @@ class SegmentHistogramTests(TestCase):
         png = make_segment_hist_png(list(range(1, 200)), protein="TEST")
 
         self.assertTrue(png.startswith(b"\x89PNG"))
+
+
+class AaTypeMatrixTests(TestCase):
+    """Mapa proseka po vrsti aminokiseline (GLU × LYS × THR)."""
+
+    def _df(self, rows):
+        return pd.DataFrame(rows, columns=["aa1", "idx1", "aa2", "idx2", "distance"])
+
+    def test_cell_is_mean_over_all_pairs_of_two_types(self):
+        df = self._df([
+            ("GLU", 1, "LYS", 2, 10.0),
+            ("GLU", 3, "LYS", 4, 20.0),
+        ])
+
+        M = make_aa_type_matrix(df)
+
+        self.assertAlmostEqual(M.loc["GLU", "LYS"], 15.0)
+
+    def test_matrix_is_symmetric_although_query_returns_one_direction(self):
+        # upit vraća par samo u jednom smeru; obe ćelije moraju biti popunjene
+        df = self._df([("GLU", 1, "LYS", 2, 10.0)])
+
+        M = make_aa_type_matrix(df)
+
+        self.assertAlmostEqual(M.loc["GLU", "LYS"], M.loc["LYS", "GLU"])
+
+    def test_diagonal_averages_pairs_of_same_type(self):
+        df = self._df([
+            ("THR", 1, "THR", 2, 4.0),
+            ("THR", 2, "THR", 3, 6.0),
+        ])
+
+        M = make_aa_type_matrix(df)
+
+        self.assertAlmostEqual(M.loc["THR", "THR"], 5.0)
+
+    def test_axes_carry_the_same_names_in_the_same_order(self):
+        df = self._df([
+            ("THR", 1, "GLU", 2, 8.0),
+            ("LYS", 3, "GLU", 4, 9.0),
+        ])
+
+        M = make_aa_type_matrix(df)
+
+        self.assertEqual(list(M.index), list(M.columns))
+        self.assertEqual(list(M.index), ["GLU", "LYS", "THR"])
+
+    def test_png_is_rendered(self):
+        df = self._df([("GLU", 1, "LYS", 2, 10.0)])
+
+        png = make_aa_type_heatmap_png(df, protein="TEST")
+
+        self.assertTrue(png.startswith(b"\x89PNG"))
+
+    def test_empty_input_yields_no_image(self):
+        png = make_aa_type_heatmap_png(self._df([]), protein="TEST")
+
+        self.assertIsNone(png)
 
 
 class StatsCacheTests(TestCase):

@@ -107,6 +107,16 @@
     white-space: nowrap;
   }
 
+  .chain-hint {
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--accent);
+  }
+
+  .chain-hint.muted { color: var(--muted); }
+  .chain-hint.error { color: #b91c1c; }
+
   .filter-sep {
     width: 1px;
     height: 34px;
@@ -168,14 +178,156 @@
     max-width: 1400px;
     margin-top: 18px;
     display: grid;
-    grid-template-columns: 1fr 380px;
+    /* Širina panela je promenljiva — menja je prevlačenje pregrade (#statsSplitter). */
+    grid-template-columns: minmax(0, 1fr) 10px var(--stats-w, 380px);
     gap: var(--gap);
     align-items: start;
   }
 
+  /* Pregrada za razvlačenje panela u širinu */
+  #statsSplitter {
+    align-self: stretch;
+    min-height: 120px;
+    border-radius: 6px;
+    background: rgba(79, 70, 229, 0.10);
+    cursor: col-resize;
+    position: relative;
+    transition: background 0.15s;
+  }
+
+  #statsSplitter::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2px;
+    height: 34px;
+    transform: translate(-50%, -50%);
+    border-radius: 2px;
+    background: rgba(79, 70, 229, 0.45);
+  }
+
+  #statsSplitter:hover,
+  body.is-resizing-stats #statsSplitter {
+    background: rgba(79, 70, 229, 0.24);
+  }
+
+  /* Dok se prevlači — bez selekcije teksta i bez "hvatanja" miša nad 3D prikazom */
+  body.is-resizing-stats {
+    cursor: col-resize;
+    user-select: none;
+  }
+
+  body.is-resizing-stats #viewer3d {
+    pointer-events: none;
+  }
+
+  /* Panel preko cele širine — 3D prikaz se sklanja, tabele dobiju svu širinu
+     i punu visinu (bez skrola), da cela tabela stane na jedan screenshot. */
+  .layout.stats-full {
+    width: 98%;
+    max-width: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layout.stats-full #graphPanel,
+  .layout.stats-full #statsSplitter {
+    display: none;
+  }
+
+  .layout.stats-full #statsPanel {
+    height: auto;
+    resize: none;
+    overflow-y: visible;
+  }
+
+  /* U širokom režimu tabele ne moraju da budu zbijene */
+  .layout.stats-full #statsPanel table {
+    font-size: 0.9rem;
+  }
+
+  .layout.stats-full #statsPanel thead th,
+  .layout.stats-full #statsPanel tbody td {
+    padding: 8px 8px;
+  }
+
+  .layout.stats-full #statsPanel thead th {
+    font-size: 0.85rem;
+  }
+
+  /* Graf preko cele širine — panel sa statistikama se sklanja, 3D prikaz
+     dobija svu širinu i nešto veću visinu, radi screenshot-a. */
+  .layout.graph-full {
+    width: 98%;
+    max-width: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layout.graph-full #statsPanel,
+  .layout.graph-full #statsSplitter {
+    display: none;
+  }
+
+  .layout.graph-full #viewer3d-wrapper {
+    height: 84vh;
+  }
+
+  /* Dugme za širinu iznad 3D prikaza */
+  .viewer-full-btn {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    z-index: 6;
+    padding: 5px 11px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(79, 70, 229, 0.20);
+    color: #4338ca;
+    box-shadow: none;
+    white-space: nowrap;
+  }
+
+  .viewer-full-btn:hover {
+    background: rgba(79, 70, 229, 0.12);
+    filter: none;
+  }
+
+  /* Zaglavlje panela: naslov + dugme za širinu */
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .panel-width-btn {
+    padding: 5px 11px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border-radius: 10px;
+    background: rgba(79, 70, 229, 0.08);
+    border: 1px solid rgba(79, 70, 229, 0.20);
+    color: #4338ca;
+    box-shadow: none;
+    white-space: nowrap;
+  }
+
+  .panel-width-btn:hover {
+    background: rgba(79, 70, 229, 0.15);
+    filter: none;
+  }
+
   /* Stats Panel */
   #statsPanel {
-    max-height: 74vh;
+    /* height (a ne max-height) da bi `resize` imao šta da menja — panel se
+       hvata za donji desni ugao i razvlači po visini, kad je potrebno da cela
+       tabela stane na sliku ekrana bez skrolovanja. */
+    height: 74vh;
+    min-height: 240px;
+    resize: vertical;
     overflow-y: auto;
     background: var(--card-bg);
     backdrop-filter: blur(10px);
@@ -629,11 +781,16 @@
   
   @media (max-width: 1100px) {
     .layout {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    #statsSplitter {
+      display: none;
     }
 
     #statsPanel {
-      max-height: none;
+      height: auto;
+      resize: none;
       overflow-y: visible;
     }
   }
@@ -794,6 +951,39 @@
   font-weight: 700;
   border: 1px solid #e0e0e0;
 }
+
+/* Legenda aminokiselina — po fizičko-hemijskim svojstvima */
+.aa-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.aa-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #3a4149;
+}
+
+.aa-legend-key {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* Boje moraju da prate .aa-* pravila iznad */
+.k-nepolarne { background: #e6b800; }
+.k-polarne   { background: #4caf50; }
+.k-bazne     { background: #2979ff; }
+.k-kisele    { background: #e53935; }
+.k-ostalo    { background: #9e9e9e; }
 
 /* AA sequence boje — po hemijskim svojstvima */
 .aa-hydrophobic { background: #fff3b0; border-top: 3px solid #e6b800; color: #5a4400; } /* A V I L M F W P G */

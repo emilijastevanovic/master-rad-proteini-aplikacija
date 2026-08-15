@@ -1,10 +1,12 @@
 import logging
+import math
 
 import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import seaborn as sns
 import io
 
@@ -335,7 +337,7 @@ def plot_pie_from_percent_table(t: pd.DataFrame, name_col: str, value_col: str =
     plt.show()
 
 
-def make_heat_maps(df: pd.DataFrame, protein: str):
+def make_heat_maps(df: pd.DataFrame, protein: str, subtitle: str = None):
   M = make_heatmap_matrix(df)
 
   import re
@@ -347,7 +349,10 @@ def make_heat_maps(df: pd.DataFrame, protein: str):
 
   fig1, ax1 = plt.subplots(figsize=(12, 10))
   sns.heatmap(M, cmap="viridis", square=True, ax=ax1)
-  ax1.set_title(f"Matrica rastojanja — {protein}")
+  title = f"Matrica rastojanja — {protein}"
+  if subtitle:
+    title += f"\n{subtitle}"
+  ax1.set_title(title)
   ax1.set_xlabel("Aminokiselina")
   ax1.set_ylabel("Aminokiselina")
   fig1.tight_layout()
@@ -361,6 +366,67 @@ def make_heat_maps(df: pd.DataFrame, protein: str):
   return {
         "distance_png": buf1.getvalue(),
     }
+
+
+def make_aa_type_matrix(df: pd.DataFrame) -> pd.DataFrame:
+  """
+  Matrica prosečnih rastojanja po VRSTI aminokiseline.
+
+  Za razliku od `make_heatmap_matrix`, gde je svaka ćelija jedan par reziduuma
+  (GLU12 — LYS45), ovde je ćelija prosek preko svih parova dve vrste. Za izbor
+  GLU, LYS, THR dobija se matrica 3×3.
+  """
+  pom = df[["aa1", "aa2", "distance"]].copy()
+  pom["distance"] = pd.to_numeric(pom["distance"], errors="coerce")
+  pom = pom.dropna(subset=["distance", "aa1", "aa2"])
+  if pom.empty:
+    return pd.DataFrame()
+
+  # Upit vraća svaki par u jednom smeru (a1.index < a2.index nije uslov, ali
+  # veza jeste usmerena), pa se drugi smer dodaje ručno — inače bi (GLU, LYS) i
+  # (LYS, GLU) bile dve ćelije nad različitim skupovima parova. Dupliranje ne
+  # menja prosek ni van dijagonale ni na njoj.
+  obrnuto = pom.rename(columns={"aa1": "aa2", "aa2": "aa1"})
+  oba = pd.concat([pom, obrnuto], ignore_index=True)
+
+  matrix = oba.pivot_table(index="aa1", columns="aa2", values="distance", aggfunc="mean")
+
+  # ista imena i isti redosled na obe ose, da matrica bude kvadratna i simetrična
+  imena = sorted(set(matrix.index) | set(matrix.columns))
+  return matrix.reindex(index=imena, columns=imena)
+
+
+def make_aa_type_heatmap_png(df: pd.DataFrame, protein: str, subtitle: str = None):
+  """Toplotna mapa prosečnih rastojanja po vrsti aminokiseline (PNG bajtovi)."""
+  M = make_aa_type_matrix(df)
+  if M.empty:
+    return None
+
+  n = len(M)
+  strana = max(4.0, min(12.0, 0.7 * n + 2.5))
+  fig, ax = plt.subplots(figsize=(strana, strana * 0.85))
+
+  # vrednosti se ispisuju dok matrica ostaje čitljiva; preko toga ostaju boje
+  sns.heatmap(
+    M, cmap="viridis", square=True, ax=ax,
+    annot=(n <= 12), fmt=".1f", annot_kws={"size": 8},
+    cbar_kws={"label": "Prosečno rastojanje (Å)"},
+  )
+
+  title = f"Prosečno rastojanje po vrsti aminokiseline — {protein}"
+  if subtitle:
+    title += f"\n{subtitle}"
+  ax.set_title(title)
+  ax.set_xlabel("Aminokiselina")
+  ax.set_ylabel("Aminokiselina")
+  fig.tight_layout()
+
+  buf = io.BytesIO()
+  fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+  plt.close(fig)
+
+  return buf.getvalue()
+
 
 def make_aa_string(df:pd.DataFrame) -> str:
     """
@@ -391,22 +457,81 @@ def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
     return stats_df
 
 
+SS_NAZIVI = {
+    "H": "α-heliks",
+    "G": "3₁₀-heliks",
+    "I": "π-heliks",
+    "E": "β-lanac",
+    "B": "β-most",
+    "T": "okret",
+    "S": "savijanje",
+    "-": "nesvrstano",
+}
+
+
+def _hist_edges(ax, segment_lengths, bins):
+    """Dužine segmenata su celi brojevi. Kad je opseg uži od zadatog broja
+    pregrada, poravnaj pregrade na cele brojeve — inače matplotlib razbije
+    npr. opseg 1–8 na 30 pregrada, pa stupci ispadnu tanki i pomereni u
+    odnosu na oznaku ispod njih."""
+    # broj pojavljivanja je ceo broj, pa i oznake na y osi moraju biti cele
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    lo, hi = min(segment_lengths), max(segment_lengths)
+    if hi - lo < bins:
+        ax.set_xticks(range(lo, hi + 1))
+        # po jedna prazna pregrada sa svake strane: kad svi segmenti jedne SS
+        # klase imaju istu dužinu, bez ovoga se jedini stubac razvuče preko
+        # cele širine i izgleda kao da nešto nije u redu
+        ax.set_xlim(lo - 1.5, hi + 1.5)
+        return np.arange(lo - 0.5, hi + 1.5, 1.0)
+
+    return bins
+
+
+def make_segment_hist_by_ss_png(groups: dict, protein: str, bins: int = 30) -> bytes:
+    """Isti tip histograma kao zbirni, ali po jedan za svaku SS klasu.
+    Klase idu od najbrojnije ka najređoj, da najvažnije budu u prvom redu."""
+    order = sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+
+    cols = 2 if len(order) > 1 else 1
+    rows = math.ceil(len(order) / cols)
+
+    fig, axes = plt.subplots(rows, cols, figsize=(6.5 * cols, 3.4 * rows), squeeze=False)
+    flat = [ax for row in axes for ax in row]
+
+    for ax, (ss, lengths) in zip(flat, order):
+        edges = _hist_edges(ax, lengths, bins)
+        ax.hist(lengths, bins=edges, color="#1f77b4", edgecolor="white")
+        naziv = SS_NAZIVI.get(ss, ss)
+        ax.set_title(f"{ss} — {naziv}  (segmenata: {len(lengths)})", fontsize=11)
+        ax.set_xlabel("Dužina segmenta (br. rezidua)")
+        ax.set_ylabel("Broj pojavljivanja")
+
+    # prazna polja u poslednjem redu se sklanjaju
+    for ax in flat[len(order):]:
+        ax.set_visible(False)
+
+    fig.suptitle(f"Raspodela dužina segmenata po SS tipu — {protein}")
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 def make_segment_hist_png(segment_lengths: list, protein: str, bins: int = 30) -> bytes:
     fig, ax = plt.subplots(figsize=(7, 4))
 
-    # Dužine segmenata su celi brojevi. Kad je opseg uži od zadatog broja
-    # pregrada, poravnaj pregrade na cele brojeve — inače matplotlib razbije
-    # npr. opseg 1–8 na 30 pregrada, pa stupci ispadnu tanki i pomereni u
-    # odnosu na oznaku ispod njih.
-    lo, hi = min(segment_lengths), max(segment_lengths)
-    if hi - lo < bins:
-        edges = np.arange(lo - 0.5, hi + 1.5, 1.0)
-        ax.set_xticks(range(lo, hi + 1))
-    else:
-        edges = bins
+    edges = _hist_edges(ax, segment_lengths, bins)
 
     ax.hist(segment_lengths, bins=edges, color="#1f77b4", edgecolor="white")
-    ax.set_title(f"Raspodela dužina segmenata — {protein}")
+    # "svi SS tipovi" stoji namerno: dužine heliksa, ploča i okreta ulaze u
+    # istu raspodelu, pa bez te napomene grafik izgleda kao raspodela jedne
+    # pojave umesto kao zbir nekoliko.
+    ax.set_title(f"Raspodela dužina segmenata (svi SS tipovi) — {protein}")
     ax.set_xlabel("Dužina segmenta (br. rezidua)")
     ax.set_ylabel("Broj pojavljivanja")
     fig.tight_layout()
