@@ -10,6 +10,14 @@ U projekat stavi dump baze ovde:
 neo4j/backup/neo4j.dump
 ```
 
+Dump se preuzima iz repozitorijuma
+[protein-distance-graph-db](https://github.com/emilijastevanovic/protein-distance-graph-db):
+
+```bash
+curl -L -o neo4j/backup/neo4j.dump \
+  https://github.com/emilijastevanovic/protein-distance-graph-db/releases/latest/download/neo4j.dump
+```
+
 Ako je ime baze drugacije, naziv dump fajla ce pratiti to ime.
 
 ## 1. Priprema `.env`

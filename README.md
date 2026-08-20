@@ -17,10 +17,17 @@ Neo4j instanca u koju su uvezeni podaci.
 
 ## Baza podataka
 
-Dump baze nije deo Git repozitorijuma jer zauzima oko 2 GB. Uz predaju ga treba
-dostaviti zasebno, na primer u arhivi ili putem Google Drive linka.
+Dump baze nije deo ovog repozitorijuma jer zauzima oko 2 GB. Objavljen je u
+zasebnom repozitorijumu
+[protein-distance-graph-db](https://github.com/emilijastevanovic/protein-distance-graph-db)
+i preuzima se ovako:
 
-Nakon preuzimanja dump treba postaviti na sledeću putanju u projektu:
+```bash
+curl -L -o neo4j/backup/neo4j.dump \
+  https://github.com/emilijastevanovic/protein-distance-graph-db/releases/latest/download/neo4j.dump
+```
+
+Dump treba da se nađe na sledećoj putanji u projektu:
 
 ```text
 neo4j/backup/neo4j.dump
