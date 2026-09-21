@@ -56,8 +56,14 @@ dist/
 *.swo
 
 IMPROVEMENTS.txt
-PREZENTACIJA.md
+
+# Uputstva i beleske, u repo ide samo README
+*.md
+!README.md
 
 # Local Neo4j dumps for Docker restore
 neo4j/backup/*
 !neo4j/backup/.gitkeep
+
+# Cα koordinate iz PDB-a, ulaz za uvoz u bazu (933 fajla, ~14 MB)
+ca_koordinate/
