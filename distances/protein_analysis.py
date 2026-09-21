@@ -15,9 +15,7 @@ logger = logging.getLogger(__name__)
 
 def make_residual_level_df(df:pd.DataFrame) -> pd.DataFrame:
 
-  """  
-  Funkcija vraca DataFrame gde svaki red predstavlja pojedinacnu aminokiselinu u sekvenci proteina.
-  """
+  """Vraca DataFrame gde svaki red predstavlja pojedinacnu aminokiselinu u sekvenci proteina."""
   df = df.copy()
 
   res1 = (
@@ -55,12 +53,23 @@ def make_residual_level_df(df:pd.DataFrame) -> pd.DataFrame:
 
 
 def make_heatmap_matrix(df:pd.DataFrame) -> pd.DataFrame:
-  """
-  Funkcija pravi heatmap matricu rastojanja izmedju aminokiselina.
-  """
-  df_pom = df[["aa1", "idx1", "aa2", "idx2", "distance"]]
-  df_pom["node1"] = df_pom["aa1"].astype(str) + df_pom["idx1"].astype(str)
-  df_pom["node2"] = df_pom["aa2"].astype(str) + df_pom["idx2"].astype(str)
+  """Pravi heatmap matricu rastojanja izmedju aminokiselina, sa lancem u oznaci kad ih ima vise."""
+  ima_lance = {"ch1", "ch2"}.issubset(df.columns)
+  kolone = (["ch1", "ch2"] if ima_lance else []) + ["aa1", "idx1", "aa2", "idx2", "distance"]
+  df_pom = df[kolone].copy()
+
+  vise_lanaca = ima_lance and len(
+      set(df_pom["ch1"].dropna()) | set(df_pom["ch2"].dropna())
+  ) > 1
+
+  node1 = df_pom["aa1"].astype(str) + df_pom["idx1"].astype(str)
+  node2 = df_pom["aa2"].astype(str) + df_pom["idx2"].astype(str)
+  if vise_lanaca:
+    node1 = df_pom["ch1"].astype(str) + ":" + node1
+    node2 = df_pom["ch2"].astype(str) + ":" + node2
+
+  df_pom["node1"] = node1
+  df_pom["node2"] = node2
 
   matrix = df_pom.pivot_table(index="node1", columns="node2", values="distance", aggfunc="mean")
   matrix = matrix.combine_first(matrix.T)
@@ -191,10 +200,7 @@ def chain_summary(res: pd.DataFrame) -> pd.DataFrame:
 
 def build_ss_string_with_gaps(chain_df: pd.DataFrame, ss_col="ss", index_col="indeks",
                               gap_char=".", fill_char="NA") -> str:
-    """
-    chain_df: df samo za jedan protein+lanac, sa kolonama ss i indeks
-    Vraca string sekundarne strukture, uz ubacivanje gap_char gde fali indeks.
-    """
+    """Vraca string sekundarne strukture za jedan protein i lanac, sa gap_char gde fali indeks."""
     chain_df = chain_df.copy()
     chain_df[ss_col] = chain_df[ss_col].fillna(fill_char).astype(str)
     chain_df[index_col] = pd.to_numeric(chain_df[index_col], errors="coerce")
@@ -222,11 +228,7 @@ def format_ss_track(ss_string: str,
                     line_width: int = 80,
                     tick_every: int = 10,
                     label: str = "ss") -> str:
-    """
-    Pravi blok prikaz:
-    0         10        20 ...
-    ss: ---EEEHHH...
-    """
+    """Pravi blok prikaz SS niza, sa redom indeksa iznad svakog reda oznaka."""
     if not ss_string:
         return f"{label}: <empty>"
 
@@ -262,12 +264,7 @@ def print_ss_tracks(res: pd.DataFrame,
                     gap_char: str = ".",
                     fill_char: str = "-",
                     max_chars: int | None = None):
-    """
-    Ispisuje SS trackove za svaki protein i lanac.
-    gap_char: ubacuje se kad fali indeks (npr '.')
-    fill_char: ako ss NaN, sta ubaciti (npr '-')
-    max_chars: ako zelis skratiti prikaz (npr 300)
-    """
+    """Ispisuje SS trackove za svaki protein i lanac."""
 
     res = res.copy()
 
@@ -341,11 +338,13 @@ def make_heat_maps(df: pd.DataFrame, protein: str, subtitle: str = None):
   M = make_heatmap_matrix(df)
 
   import re
-  def extract_num(s):
-    m = re.search(r"(\d+)$", s)
-    return int(m.group(1)) if m else 10**9
+  def kljuc(s):
+    # "A:GLU12" -> ("A", 12); lanci idu jedan za drugim, a u lancu po rednom broju
+    lanac, _, ostatak = s.rpartition(":")
+    m = re.search(r"(\d+)$", ostatak)
+    return (lanac, int(m.group(1)) if m else 10**9)
 
-  M = M.loc[sorted(M.index, key=extract_num), sorted(M.columns, key=extract_num)]
+  M = M.loc[sorted(M.index, key=kljuc), sorted(M.columns, key=kljuc)]
 
   fig1, ax1 = plt.subplots(figsize=(12, 10))
   sns.heatmap(M, cmap="viridis", square=True, ax=ax1)
@@ -369,35 +368,27 @@ def make_heat_maps(df: pd.DataFrame, protein: str, subtitle: str = None):
 
 
 def make_aa_type_matrix(df: pd.DataFrame) -> pd.DataFrame:
-  """
-  Matrica prosečnih rastojanja po VRSTI aminokiseline.
-
-  Za razliku od `make_heatmap_matrix`, gde je svaka ćelija jedan par reziduuma
-  (GLU12 — LYS45), ovde je ćelija prosek preko svih parova dve vrste. Za izbor
-  GLU, LYS, THR dobija se matrica 3×3.
-  """
+  """Pravi matricu prosecnih rastojanja po vrsti aminokiseline, celija je prosek parova dve vrste."""
   pom = df[["aa1", "aa2", "distance"]].copy()
   pom["distance"] = pd.to_numeric(pom["distance"], errors="coerce")
   pom = pom.dropna(subset=["distance", "aa1", "aa2"])
   if pom.empty:
     return pd.DataFrame()
 
-  # Upit vraća svaki par u jednom smeru (a1.index < a2.index nije uslov, ali
-  # veza jeste usmerena), pa se drugi smer dodaje ručno — inače bi (GLU, LYS) i
-  # (LYS, GLU) bile dve ćelije nad različitim skupovima parova. Dupliranje ne
-  # menja prosek ni van dijagonale ni na njoj.
+  # upit vraca par samo u jednom smeru, pa se drugi dodaje rucno, inace bi
+  # (GLU, LYS) i (LYS, GLU) bile dve celije nad razlicitim parovima
   obrnuto = pom.rename(columns={"aa1": "aa2", "aa2": "aa1"})
   oba = pd.concat([pom, obrnuto], ignore_index=True)
 
   matrix = oba.pivot_table(index="aa1", columns="aa2", values="distance", aggfunc="mean")
 
-  # ista imena i isti redosled na obe ose, da matrica bude kvadratna i simetrična
+  # ista imena i redosled na obe ose, da matrica bude kvadratna i simetricna
   imena = sorted(set(matrix.index) | set(matrix.columns))
   return matrix.reindex(index=imena, columns=imena)
 
 
 def make_aa_type_heatmap_png(df: pd.DataFrame, protein: str, subtitle: str = None):
-  """Toplotna mapa prosečnih rastojanja po vrsti aminokiseline (PNG bajtovi)."""
+  """Crta toplotnu mapu prosecnih rastojanja po vrsti aminokiseline i vraca PNG bajtove."""
   M = make_aa_type_matrix(df)
   if M.empty:
     return None
@@ -406,7 +397,7 @@ def make_aa_type_heatmap_png(df: pd.DataFrame, protein: str, subtitle: str = Non
   strana = max(4.0, min(12.0, 0.7 * n + 2.5))
   fig, ax = plt.subplots(figsize=(strana, strana * 0.85))
 
-  # vrednosti se ispisuju dok matrica ostaje čitljiva; preko toga ostaju boje
+  # brojevi se ispisuju dok matrica ostaje citljiva, preko toga samo boje
   sns.heatmap(
     M, cmap="viridis", square=True, ax=ax,
     annot=(n <= 12), fmt=".1f", annot_kws={"size": 8},
@@ -429,15 +420,11 @@ def make_aa_type_heatmap_png(df: pd.DataFrame, protein: str, subtitle: str = Non
 
 
 def make_aa_string(df:pd.DataFrame) -> str:
-    """
-    Funkcija prima rezudial level DataFrame i vraca sekvencu aminokiselina.
-    """
+    """Vraca sekvencu aminokiselina iz residual level DataFrame-a."""
     return "-".join(list(df['aa']))
 
 def make_sspair_stats(df:pd.DataFrame) -> pd.DataFrame:
-    """
-    Funkcija prima kao argument DataFrame za odredjeni tip rastojanja i vraca po paru ss-ss statistike.
-    """
+    """Vraca statistike po ss-ss paru za DataFrame odredjenog tipa rastojanja."""
     ss_pair_df = df[["ss1", "ss2", "rastojanje"]].copy()
     ss_pair_df["rastojanje"] = pd.to_numeric(ss_pair_df["rastojanje"], errors="coerce")
     ss_pair_df = ss_pair_df.dropna(subset=["rastojanje", "ss1", "ss2"])
@@ -470,19 +457,15 @@ SS_NAZIVI = {
 
 
 def _hist_edges(ax, segment_lengths, bins):
-    """Dužine segmenata su celi brojevi. Kad je opseg uži od zadatog broja
-    pregrada, poravnaj pregrade na cele brojeve — inače matplotlib razbije
-    npr. opseg 1–8 na 30 pregrada, pa stupci ispadnu tanki i pomereni u
-    odnosu na oznaku ispod njih."""
+    """Poravnava pregrade histograma na cele brojeve kad je opseg uzi od broja pregrada."""
     # broj pojavljivanja je ceo broj, pa i oznake na y osi moraju biti cele
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
     lo, hi = min(segment_lengths), max(segment_lengths)
     if hi - lo < bins:
         ax.set_xticks(range(lo, hi + 1))
-        # po jedna prazna pregrada sa svake strane: kad svi segmenti jedne SS
-        # klase imaju istu dužinu, bez ovoga se jedini stubac razvuče preko
-        # cele širine i izgleda kao da nešto nije u redu
+        # po jedna prazna pregrada sa svake strane, da se jedini stubac ne
+        # razvuce preko cele sirine kad svi segmenti imaju istu duzinu
         ax.set_xlim(lo - 1.5, hi + 1.5)
         return np.arange(lo - 0.5, hi + 1.5, 1.0)
 
@@ -490,8 +473,7 @@ def _hist_edges(ax, segment_lengths, bins):
 
 
 def make_segment_hist_by_ss_png(groups: dict, protein: str, bins: int = 30) -> bytes:
-    """Isti tip histograma kao zbirni, ali po jedan za svaku SS klasu.
-    Klase idu od najbrojnije ka najređoj, da najvažnije budu u prvom redu."""
+    """Crta po jedan histogram duzina segmenata za svaku SS klasu, od najbrojnije ka najredoj."""
     order = sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))
 
     cols = 2 if len(order) > 1 else 1
@@ -528,9 +510,7 @@ def make_segment_hist_png(segment_lengths: list, protein: str, bins: int = 30) -
     edges = _hist_edges(ax, segment_lengths, bins)
 
     ax.hist(segment_lengths, bins=edges, color="#1f77b4", edgecolor="white")
-    # "svi SS tipovi" stoji namerno: dužine heliksa, ploča i okreta ulaze u
-    # istu raspodelu, pa bez te napomene grafik izgleda kao raspodela jedne
-    # pojave umesto kao zbir nekoliko.
+    # "svi SS tipovi" u naslovu jer duzine heliksa, ploca i okreta ulaze u istu raspodelu
     ax.set_title(f"Raspodela dužina segmenata (svi SS tipovi) — {protein}")
     ax.set_xlabel("Dužina segmenta (br. rezidua)")
     ax.set_ylabel("Broj pojavljivanja")

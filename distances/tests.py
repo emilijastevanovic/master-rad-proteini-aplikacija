@@ -48,8 +48,8 @@ class AaSeqTests(TestCase):
 
         result = stat_aa_seq("1a17", None, None, None, None)
 
-        # jedan upit — front spaja aa_seq i aa_ss_seq po poziciji, pa oba
-        # niza moraju poticati iz istog skupa redova
+        # front spaja aa_seq i aa_ss_seq po poziciji, pa oba niza moraju
+        # poticati iz istog skupa redova
         self.assertEqual(run_query.call_count, 1)
         self.assertEqual(
             [r["name"] for r in result["aa_seq"]],
@@ -95,7 +95,7 @@ class DistanceParamValidationTests(TestCase):
 
     @patch("distances.views.run_query", return_value=[])
     def test_comma_is_accepted_as_decimal_separator(self, run_query):
-        # na našoj tastaturi je „8,5" prirodnije od „8.5"
+        # zarez kao decimalni znak je prirodniji sa nase tastature
         response = self._get(max_distance="8,5")
 
         self.assertEqual(response.status_code, 200)
@@ -148,7 +148,7 @@ class SegmentHistogramTests(TestCase):
 
 
 class AaTypeMatrixTests(TestCase):
-    """Mapa proseka po vrsti aminokiseline (GLU × LYS × THR)."""
+    """Mapa proseka po vrsti aminokiseline."""
 
     def _df(self, rows):
         return pd.DataFrame(rows, columns=["aa1", "idx1", "aa2", "idx2", "distance"])
@@ -164,7 +164,7 @@ class AaTypeMatrixTests(TestCase):
         self.assertAlmostEqual(M.loc["GLU", "LYS"], 15.0)
 
     def test_matrix_is_symmetric_although_query_returns_one_direction(self):
-        # upit vraća par samo u jednom smeru; obe ćelije moraju biti popunjene
+        # upit vraca par samo u jednom smeru, obe celije moraju biti popunjene
         df = self._df([("GLU", 1, "LYS", 2, 10.0)])
 
         M = make_aa_type_matrix(df)
@@ -219,7 +219,7 @@ class StatsCacheTests(TestCase):
         return self.client.get("/api/stats/", query)
 
     def test_every_handler_declares_its_cache_key(self):
-        # nova statistika mora svesno da odluči po čemu se kešira
+        # nova statistika mora svesno da odluci po cemu se kesira
         self.assertEqual(set(STAT_HANDLERS), set(STAT_CACHE_PARAMS))
 
     def test_repeated_request_is_served_from_cache(self):
@@ -240,7 +240,7 @@ class StatsCacheTests(TestCase):
         self.assertEqual(handler.call_count, 2)
 
     def test_distance_bounds_do_not_affect_key(self):
-        # aa_composition ih ne koristi u upitu, pa ne smeju da dele keš
+        # aa_composition ih ne koristi u upitu, pa ne smeju da dele kes
         handler = self._handler()
         with patch.dict(STAT_HANDLERS, {"aa_composition": handler}):
             self._get(chain="A", max_distance="8", min_distance="4")

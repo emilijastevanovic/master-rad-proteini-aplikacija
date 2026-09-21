@@ -28,22 +28,14 @@ STAT_HANDLERS = {
     "range_summary": stat_range_summary,
 }
 
-# Statistike koje pored osnovnih parametara primaju i filtere grafa
-# (sekundarna struktura, k, izabrane aminokiseline).
+# statistike koje uz osnovne parametre primaju i filtere grafa (ss, k, aminokiseline)
 GRAPH_FILTER_STATS = {"range_summary"}
 
 STATS_CACHE_TTL = 60 * 60 * 6
 
-# Parametri koje svaki handler STVARNO koristi u svom Cypher upitu — oni i
-# čine ključ keša. Namerno se razlikuju po statistici: npr. sastav
-# aminokiselina zavisi samo od proteina i lanca, pa promena tipa rastojanja
-# ne sme da pravi novi unos u kešu.
-#
-# PAŽNJA: osim `range_summary`, nijedan handler ne koristi
-# max_distance/min_distance (vidi stats_queries.py), zato ih kod ostalih nema
-# ni u ključu. Ako se neki handler izmeni da poštuje te granice, MORA se dodati
-# i ovde — inače će keš vraćati rezultat izračunat za drugi opseg. Statistika
-# koja nije navedena u ovoj mapi se jednostavno ne kešira.
+# parametri koje handler zaista koristi u upitu, od njih se pravi kljuc kesa
+# ako handler pocne da koristi jos neki parametar, treba ga dodati i ovde
+# statistika koje nema u ovoj mapi se ne kesira
 STAT_CACHE_PARAMS = {
     "aa_composition":   ("protein", "chain"),
     "ss_distribution":  ("protein", "chain"),
@@ -51,22 +43,20 @@ STAT_CACHE_PARAMS = {
     "ss_pairs":         ("protein", "chain", "type"),
     "distance_summary": ("protein", "chain", "type"),
     "outlier_ss":       ("protein", "chain", "type"),
-    # "type_raw", a ne "type": za range_summary prazan tip znači „svi tipovi",
-    # što je drugačiji rezultat od izričito izabranog „caca"
+    # type_raw jer kod range_summary prazan tip znaci sve tipove, a ne caca
     "range_summary":    ("protein", "chain", "type_raw", "max_distance", "min_distance",
                          "ss", "k", "aminonames"),
 }
 
 
 def _norm_stat_type(value):
-    """Ista normalizacija kao u stats_queries — prazan tip znači 'caca'."""
+    """Prazan tip se normalizuje na 'caca', isto kao u stats_queries."""
     return value if (value and value != "prazno") else "caca"
 
 
-# Uđe u ključ keša da bi izmena formule odbacila ranije zapamćene rezultate.
-# Povećaj kad god se promeni način računanja neke statistike.
-# v2: stat_outlier_ss više ne odseca partnere sa nižim indeksom.
-# v3: stat_outlier_ss vraća i closest_residues.
+# deo kljuca kesa, povecati kad se promeni nacin racunanja neke statistike
+# v2: stat_outlier_ss vise ne odseca partnere sa nizim indeksom
+# v3: stat_outlier_ss vraca i closest_residues
 STATS_FORMULA_VERSION = "v3"
 
 
@@ -76,8 +66,7 @@ def _stats_cache_key(name, key_params):
 
 
 def _should_cache_stat(result):
-    """Prazan rezultat se ne kešira — da uvoz novog dump-a ne bi ostao
-    zaklonjen zapamćenim 'nema podataka' do isteka TTL-a."""
+    """Prazan rezultat se ne kesira, da novi dump ne bi cekao istek TTL-a."""
     if not isinstance(result, dict) or result.get("empty"):
         return False
     if result.get("total") == 0:
@@ -91,12 +80,7 @@ def _should_cache_stat(result):
 
 
 def _clean_distance(value, label):
-    """Validira granicu rastojanja i vraća normalizovan string (ili None).
-
-    Prihvata i zarez kao decimalni znak, jer je na našoj tastaturi prirodno
-    kucnuti „8,5". Vraća string, a ne float, da bi `0` i dalje bilo tretirano
-    kao zadata granica — kao i pre ove provere.
-    """
+    """Validira granicu rastojanja i vraca je kao string, sa zarezom kao decimalnim znakom."""
     if value is None:
         return None
 
@@ -145,9 +129,8 @@ def save_latex_heatmap_png(png, protein, chain, type_, max_distance, min_distanc
 
     LATEX_HEATMAP_DIR.mkdir(parents=True, exist_ok=True)
 
-    # izbor aminokiselina ulazi u ime da mapa podskupa ne bi pregazila mapu
-    # celog proteina; kod dužih izbora ime se skraćuje i dopunjuje hešom da
-    # dva različita izbora ne bi završila u istoj datoteci
+    # izbor aminokiselina ide u ime da mapa podskupa ne pregazi mapu celog
+    # proteina, duga imena se skracuju i dopunjuju hesom
     if aminonames:
         aa_part = _safe_filename_part("-".join(aminonames))
         if len(aa_part) > 40:
@@ -192,12 +175,7 @@ CHAINS_CACHE_TTL = 60 * 60 * 6
 
 
 def chains(request):
-    """Lanci dostupni za zadati protein, sa brojem aminokiselina po lancu.
-
-    Koristi se da se padajuća lista lanaca popuni tek kad korisnik izabere
-    protein — umesto ranije fiksne liste koja je nudila i lance kojih u tom
-    proteinu nema.
-    """
+    """Vraca lance dostupne za zadati protein, sa brojem aminokiselina po lancu."""
     protein = request.GET.get("protein")
     if not protein:
         return JsonResponse({"error": "protein parameter is required"}, status=400)
@@ -227,8 +205,7 @@ def chains(request):
         "chains": [{"chain": r["chain"], "n": r["n"]} for r in rows],
     }
 
-    # prazan rezultat se ne kešira — nepostojeći protein ili tek uvezen dump ne
-    # sme da ostane zapamćen kao „nema lanaca" do isteka TTL-a
+    # prazan rezultat se ne kesira, da nepostojeci protein ne ostane zapamcen
     if data["chains"]:
         cache.set(cache_key, data, CHAINS_CACHE_TTL)
 
@@ -349,7 +326,7 @@ def stats(request):
     else:
         requested = ["aa_composition"]
 
-    # filteri grafa — koristi ih samo statistika izabranog opsega
+    # filtere grafa koristi samo statistika izabranog opsega
     try:
         graph_filters = {
             "ss": request.GET.get("ss"),
@@ -363,8 +340,7 @@ def stats(request):
 
     out = {"protein": protein, "chain": chain or None}
 
-    # normalizovano samo za ključ keša — handleri i dalje dobijaju sirove
-    # vrednosti i sami ih normalizuju, pa se ponašanje ne menja
+    # normalizovano samo za kljuc kesa, handleri dobijaju sirove vrednosti
     key_params = {
         "protein": protein.strip().upper(),
         "chain": chain,
@@ -422,11 +398,7 @@ def _clean_chain(val):
 
 
 def _aa_subtitle(aminonames, prefix):
-    """Podnaslov mape sa spiskom aminokiselina, prelomljen po redovima.
-
-    Kod izbora od dvadesetak imena jedan red bi bio širi od same slike, pa bi
-    matplotlib odsekao kraj spiska.
-    """
+    """Pravi podnaslov mape sa spiskom aminokiselina, prelomljen po redovima."""
     if not aminonames:
         return None
     return prefix + "\n".join(textwrap.wrap(", ".join(aminonames), width=64))
@@ -441,13 +413,13 @@ def heatmap_distance(request):
     if not protein:
         return JsonResponse({"error": "protein parameter is required"}, status=400)
 
-    # Kad je označen samo podskup aminokiselina, crta se zasebna mapa samo za
-    # njihove međusobne parove. Sortirano i bez duplikata, da isti izbor uvek
-    # daje isti ključ keša bez obzira na redosled klikanja.
+    # za podskup aminokiselina crta se zasebna mapa samo od njihovih parova
+    # sortirano i bez duplikata, da kljuc kesa ne zavisi od redosleda klikanja
     aminonames = sorted({a.strip().upper() for a in request.GET.get("aminoname", "").split(",") if a.strip()})
 
     protein = protein.strip().upper()
-    key_raw = f"{protein}|{chain}|{type_}|{','.join(aminonames)}"
+    # v2 zbog promene oznaka na osama, inace bi se servirale stare slike iz kesa
+    key_raw = f"v2|{protein}|{chain}|{type_}|{','.join(aminonames)}"
     cache_key = "heatmap:" + hashlib.sha256(key_raw.encode("utf-8")).hexdigest()
 
     cached_png = cache.get(cache_key)
@@ -481,13 +453,7 @@ def heatmap_distance(request):
 
 
 def heatmap_aa_types(request):
-    """Toplotna mapa prosečnih rastojanja po VRSTI aminokiseline.
-
-    `heatmap_distance` daje po jedan red i kolonu za svaki reziduum, pa je za
-    ceo protein matrica velika koliko i lanac. Ovde je jedinica vrsta: za izbor
-    GLU, LYS, THR matrica je 3×3, a ćelija je prosek preko svih parova te dve
-    vrste u proteinu.
-    """
+    """Vraca toplotnu mapu prosecnih rastojanja po vrsti aminokiseline."""
     protein = request.GET.get("protein")
     chain = _clean_chain(request.GET.get("chain"))
     type_ = request.GET.get("type", "caca")
@@ -496,8 +462,7 @@ def heatmap_aa_types(request):
     if not protein:
         return JsonResponse({"error": "protein parameter is required"}, status=400)
 
-    # sortirano i bez duplikata — isti izbor daje isti ključ keša bez obzira na
-    # redosled klikanja, isto kao kod heatmap_distance
+    # sortirano i bez duplikata, isto kao kod heatmap_distance
     aminonames = sorted({a.strip().upper() for a in request.GET.get("aminoname", "").split(",") if a.strip()})
 
     protein = protein.strip().upper()
@@ -568,7 +533,7 @@ def segments_histogram(request):
 
 
 def segments_histogram_by_ss(request):
-    """Isti histogram kao /heatmap/segments/, ali razložen po SS tipovima."""
+    """Isti histogram kao /heatmap/segments/, ali razlozen po SS tipovima."""
     protein = request.GET.get("protein")
     chain = _clean_chain(request.GET.get("chain"))
 

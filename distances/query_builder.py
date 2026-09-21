@@ -8,7 +8,7 @@ def build_graph3d_protein(p):
     has_ss = _present(p.get("ss"))
     has_k  = _present(p.get("k"))
 
-    # node-only grana — nema edge filtera (k tera na edge granu)
+    # grana samo sa cvorovima, bez edge filtera (k trazi edge granu)
     if (
         not p.get("aminonames") and
         not p.get("max_distance") and
@@ -46,7 +46,9 @@ def build_graph3d_protein(p):
     q = [
         "MATCH (a1:AminoAcid)-[r:DISTANCE]->(a2:AminoAcid)",
         "WHERE a1.protein = $protein",
-        "AND a1.index < a2.index",
+        # bez Ca koordinata cvor se ne moze iscrtati: x/y/z bi bili null, pa bi
+        # jedan NaN u zoomTo() oborio ceo prikaz
+        "AND a1.ca_coordinates IS NOT NULL AND a2.ca_coordinates IS NOT NULL",
     ]
 
     if _present(p.get("chain")):

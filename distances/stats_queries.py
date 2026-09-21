@@ -75,11 +75,8 @@ def stat_ss_distribution(protein, chain, type, max_distance, min_distance):
 
 def stat_aa_seq(protein, chain, type, max_distance, min_distance):
 
-    # Jedan upit za oba niza — front ih spaja po poziciji (SEQ_CACHE[i]),
-    # pa poravnanje mora biti garantovano istim skupom redova. Sa dva
-    # odvojena upita i ORDER BY samo po index-u, kod višelančanih proteina
-    # izjednačeni indeksi (A:1, B:1, ...) nisu deterministički poređani,
-    # što bi tiho pomerilo SS traku u odnosu na sekvencu.
+    # oba niza iz jednog upita, front ih spaja po poziciji pa redosled mora
+    # biti isti; kod vise lanaca ORDER BY samo po index-u nije dovoljan
     cypher = """
         MATCH (aa:AminoAcid)
         WHERE aa.protein = $protein
@@ -105,8 +102,10 @@ def stat_aa_heatmap_df(protein, chain, type, max_distance, min_distance, aminona
         WHERE a1.protein = $protein AND a2.protein = $protein
           AND ($chain IS NULL OR (a1.chain = $chain AND a2.chain = $chain))
           AND ($aminonames IS NULL OR (a1.name IN $aminonames AND a2.name IN $aminonames))
-        RETURN a1.name AS aa1, a1.index AS idx1, a2.name AS aa2, a2.index AS idx2, d.value AS distance
-        ORDER BY a1.index, a2.index ASC
+        RETURN a1.chain AS ch1, a1.name AS aa1, a1.index AS idx1,
+               a2.chain AS ch2, a2.name AS aa2, a2.index AS idx2,
+               d.value AS distance
+        ORDER BY a1.chain, a1.index, a2.chain, a2.index ASC
     """
 
     protein = protein.strip().upper()
@@ -129,7 +128,6 @@ def stat_ss_pairs(protein, chain, type, max_distance, min_distance):
     cypher = """
         MATCH (a1:AminoAcid)-[d:DISTANCE{type:$type}]->(a2:AminoAcid)
         WHERE a1.protein = $protein AND a2.protein = $protein
-          AND a1.index < a2.index
           AND a1.ss IS NOT NULL AND a2.ss IS NOT NULL
           AND ($chain IS NULL OR a1.chain = $chain)
         WITH
@@ -161,7 +159,6 @@ def stat_distance_summary(protein, chain, type, max_distance, min_distance):
     cypher = """
         MATCH (a1:AminoAcid)-[d:DISTANCE{type:$type}]->(a2:AminoAcid)
         WHERE a1.protein = $protein AND a2.protein = $protein
-          AND a1.index < a2.index
           AND ($chain IS NULL OR a1.chain = $chain)
         WITH collect(d.value) AS vals,
              count(d.value)                          AS total,
@@ -208,13 +205,11 @@ def stat_distance_summary(protein, chain, type, max_distance, min_distance):
     return {"type": type_, **rows[0]}
 
 
-# Zajednički WHERE za statistiku izabranog opsega. Namerno prati filtere iz
-# query_builder.build_graph3d_protein (edge grana) da bi tabele opisivale isti
-# skup parova koji se crta u 3D prikazu. Granice rastojanja se dodaju posebno,
-# jer se procenat računa u odnosu na parove bez tih granica.
+# zajednicki WHERE za statistiku izabranog opsega, prati filtere iz
+# query_builder.build_graph3d_protein da tabele opisu isti skup parova kao 3D prikaz
+# granice rastojanja se dodaju posebno, jer se procenat racuna bez njih
 _RANGE_BASE_WHERE = """
         WHERE a1.protein = $protein AND a2.protein = $protein
-          AND a1.index < a2.index
           AND ($chain IS NULL OR (a1.chain = $chain AND a2.chain = $chain))
           AND ($aminonames IS NULL OR (a1.name IN $aminonames AND a2.name IN $aminonames))
           AND ($type IS NULL OR d.type = $type)
@@ -230,14 +225,7 @@ _RANGE_LIMITS_WHERE = """
 
 def stat_range_summary(protein, chain, type, max_distance, min_distance,
                        ss=None, k=None, aminonames=None):
-    """Statistika rastojanja za trenutno izabrane filtere.
-
-    Za razliku od `stat_distance_summary`, koji uvek gleda ceo protein, ovde
-    ulaze samo parovi koji prolaze sve izabrane filtere (tip, lanac, granice,
-    k, sekundarna struktura, aminokiseline). Procenat se računa u odnosu na
-    parove koji prolaze iste filtere BEZ granica rastojanja — tako se vidi
-    koliki deo kontakata izabrani opseg zapravo zahvata.
-    """
+    """Vraca statistiku rastojanja samo za parove koji prolaze trenutno izabrane filtere."""
     protein = protein.strip().upper()
 
     params = {
@@ -251,9 +239,8 @@ def stat_range_summary(protein, chain, type, max_distance, min_distance,
         "min_distance": float(min_distance) if (min_distance not in (None, "", "prazno")) else None,
     }
 
-    # Jedan prolaz daje i ukupan broj parova bez granica (total_base) i
-    # statistiku unutar granica. CASE WHEN + collect: collect preskače null,
-    # pa u `vals` ostaju samo vrednosti unutar opsega.
+    # u jednom prolazu i ukupan broj parova bez granica i statistika unutar
+    # granica; collect preskace null, pa u vals ostaju samo vrednosti iz opsega
     cypher_summary = """
         MATCH (a1:AminoAcid)-[d:DISTANCE]->(a2:AminoAcid)
     """ + _RANGE_BASE_WHERE + """
@@ -287,8 +274,7 @@ def stat_range_summary(protein, chain, type, max_distance, min_distance,
         ORDER BY count DESC
     """
 
-    # Isto normalizovanje para kao u stat_ss_pairs (H E i E H su isti par),
-    # ali samo nad parovima unutar izabranog opsega.
+    # par se normalizuje kao u stat_ss_pairs (H E i E H su isti par)
     cypher_by_ss_pair = """
         MATCH (a1:AminoAcid)-[d:DISTANCE]->(a2:AminoAcid)
     """ + _RANGE_BASE_WHERE + _RANGE_LIMITS_WHERE + """
@@ -335,8 +321,8 @@ def stat_range_summary(protein, chain, type, max_distance, min_distance,
         }
 
     ss_pairs = run_query(cypher_by_ss_pair, **params)
-    # udeo se računa u odnosu na parove sa poznatom SS oznakom, a ne na `count`
-    # — aminokiseline bez ss ne ulaze u ovu tabelu, pa bi zbir inače bio < 100 %
+    # udeo se racuna u odnosu na parove sa poznatom ss oznakom, a ne na count,
+    # jer aminokiseline bez ss ne ulaze u tabelu
     ss_total = sum(r["count"] for r in ss_pairs) or 0
     for r in ss_pairs:
         r["pct"] = round(r["count"] * 100 / ss_total, 1) if ss_total else None
@@ -363,11 +349,8 @@ def stat_range_summary(protein, chain, type, max_distance, min_distance,
 def stat_outlier_ss(protein, chain, type, max_distance, min_distance):
     type_ = type if (type and type != "prazno") else "caca"
 
-    # Veza se namerno hvata neusmereno i BEZ uslova a1.index < a2.index:
-    # prosek po reziduumu mora da obuhvati sve njegove partnere, a ne samo one
-    # sa višim indeksom (to bi reziduumima pri kraju lanca veštački spuštalo
-    # prosek). Ako je veza u grafu upisana u oba smera, isti partner se broji
-    # dvaput sa istom vrednošću, što ne menja prosek.
+    # veza se hvata neusmereno, da prosek po reziduumu obuhvati sve partnere,
+    # a ne samo one sa visim indeksom
     cypher_ss = """
         MATCH (a1:AminoAcid)-[d:DISTANCE{type:$type}]-(a2:AminoAcid)
         WHERE a1.protein = $protein AND a2.protein = $protein
@@ -385,8 +368,8 @@ def stat_outlier_ss(protein, chain, type, max_distance, min_distance):
         ORDER BY mean DESC
     """
 
-    # Isti razlog za neusmerenu vezu kao gore — inače "najizolovaniji" postaju
-    # prosto reziduumi sa početka lanca.
+    # neusmerena veza iz istog razloga, inace bi najizolovaniji bili reziduumi
+    # sa pocetka lanca
     cypher_top = """
         MATCH (a1:AminoAcid)-[d:DISTANCE{type:$type}]-(a2:AminoAcid)
         WHERE a1.protein = $protein AND a2.protein = $protein
@@ -399,9 +382,8 @@ def stat_outlier_ss(protein, chain, type, max_distance, min_distance):
         RETURN aa, index, chain, ss, round(avg_dist, 3) AS avg_dist
     """
 
-    # Ogledalo prethodnog upita: najmanje prosečno rastojanje do svih ostalih
-    # imaju aminokiseline iz jezgra proteina — one koje ostvaruju najviše
-    # bliskih kontakata. Isti razlog za neusmerenu vezu kao gore.
+    # obrnuto od prethodnog upita: najmanje prosecno rastojanje imaju
+    # aminokiseline iz jezgra proteina
     cypher_closest = """
         MATCH (a1:AminoAcid)-[d:DISTANCE{type:$type}]-(a2:AminoAcid)
         WHERE a1.protein = $protein AND a2.protein = $protein
@@ -426,9 +408,7 @@ def stat_outlier_ss(protein, chain, type, max_distance, min_distance):
 
 
 def _segment_table(protein, chain):
-    """Tabela segmenata: po jedan red za svaki neprekinuti niz iste SS klase,
-    sa oznakom te klase i dužinom. Osnova i za zbirni histogram i za histograme
-    po SS tipu, da se segmenti u oba slučaja seku na isti način."""
+    """Vraca tabelu segmenata, po jedan red za svaki neprekinuti niz iste SS klase."""
     cypher = """
         MATCH (aa:AminoAcid)
         WHERE aa.protein = $protein
@@ -471,7 +451,7 @@ def stat_segment_lengths(protein, chain):
 
 
 def stat_segment_lengths_by_ss(protein, chain):
-    """{SS oznaka: [dužine segmenata]} — ulaz za histograme po SS tipu."""
+    """Grupise duzine segmenata po SS oznaci, za histograme po SS tipu."""
     segments = _segment_table(protein, chain)
     if segments.empty:
         return {}
